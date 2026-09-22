@@ -1,0 +1,34 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<!-- 把目标框架从 net10.0 改成 net8.0-windows：
+         SAP2000 v26 内部用 .NET 8，插件必须按它的版本编译 -->
+		<TargetFramework>net8.0-windows</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+
+		<!-- 允许在类库里放 Windows 窗口 -->
+		<UseWindowsForms>true</UseWindowsForms>
+
+		<!-- 允许 SAP2000 把我们当插件动态加载（关键开关） -->
+		<EnableDynamicLoading>true</EnableDynamicLoading>
+
+		<!-- SAP2000 v26 是 64 位，插件也必须 64 位 -->
+		<Platforms>x64</Platforms>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- 引用你机器上的 SAP2000 API 库 -->
+		<Reference Include="CSiAPIv1">
+			<HintPath>C:\Program Files\Computers and Structures\SAP2000 26\CSiAPIv1.dll</HintPath>
+			<!-- 这两行是说：别把这个 dll 复制到我们自己的输出目录 -->
+			<Private>false</Private>
+			<ExcludeAssets>runtime</ExcludeAssets>
+		</Reference>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Folder Include="2Design\" />
+	</ItemGroup>
+
+</Project>
