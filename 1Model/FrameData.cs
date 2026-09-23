@@ -11,5 +11,7 @@ namespace PortalFrame._1Model
         public string Name = "";
         public string StartJoint = "";
         public string EndJoint = "";
+        public double Length;   // 杆件长度
+
     }
 }

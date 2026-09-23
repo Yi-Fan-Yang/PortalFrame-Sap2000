@@ -20,6 +20,7 @@ namespace PortalFrame._4UI
 
 
         private Button _btnReadModel = null!;
+        private Button _btnRunCheck = null!;
         private DoubleBufferedPanel _canvas = null!;
         private ModelRenderer _renderer = null!;
         private enum DragMode { None, Rotate, Pan }
@@ -42,6 +43,8 @@ namespace PortalFrame._4UI
         {
             _btnReadModel = new Button();
             _canvas = new DoubleBufferedPanel();
+            _btnRunCheck = new Button();
+
         }
         private void LayoutControls()
         {
@@ -49,12 +52,17 @@ namespace PortalFrame._4UI
             _btnReadModel.Size = new Size(160, 30);
             _btnReadModel.Location = new Point(10, 10);
 
+            _btnRunCheck.Text = "运行验算";
+            _btnRunCheck.Size = new Size(160, 30);
+            _btnRunCheck.Location = new Point(180, 10);
+
             _canvas.BackColor = Color.White;
             _canvas.Location = new Point(10, 50);
             _canvas.Size = new Size(760, 510);
             _canvas.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
 
             Controls.Add(_btnReadModel);
+            Controls.Add(_btnRunCheck);
             Controls.Add(_canvas);
         }
 
@@ -68,6 +76,7 @@ namespace PortalFrame._4UI
 
 
             _btnReadModel.Click += BtnReadModel_Click;
+            _btnRunCheck.Click += BtnRunCheck_Click;
             _canvas.Paint += Canvas_Paint;
             FormClosing += MainForm_FormClosing;
         }
@@ -95,18 +104,34 @@ namespace PortalFrame._4UI
                 $"截面 {_store.Sections.Count}，材料 {_store.Materials.Count}\n" +
                 $"组合 {_store.Combos.Count}");
         }
+        private void BtnRunCheck_Click(object? sender, EventArgs e)
+        {
+            string combo = _store.Combos.First();   // 临时：先取第一个组合
+            _dispatch.RunCheck(combo);
+
+            // 临时验证：找最大利用率
+            var maxUtil = _store.CheckResults.Values
+                .SelectMany(r => r)
+                .Max(c => c.Utilization);
+
+            MessageBox.Show($"验算完成\n最大利用率：{maxUtil:F3}");
+        }
+
 
         private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
         {
             _pluginCallback.Finish(_errorCode);
         }
 
+
+
+
+        //=====================画布相关=========================
         private void Canvas_Paint(object? sender, PaintEventArgs e)
         {
             // 把画笔和画布大小交给渲染器，让它去画
             _renderer.Draw(e.Graphics, _canvas.ClientSize.Width, _canvas.ClientSize.Height);
         }
-
         // 鼠标按下：记下来"按着了"，记下位置
         private void Canvas_MouseDown(object? sender, MouseEventArgs e)
         {
@@ -136,12 +161,6 @@ namespace PortalFrame._4UI
         {
             _dragMode = DragMode.None;
         }
-
-        private void InitializeComponent()
-        {
-
-        }
-
         private void Canvas_MouseWheel(object? sender, MouseEventArgs e)
         {
             _renderer.Zoom(e.Delta, e.X, e.Y);   // e.Delta 是滚轮滚动量，向上为正;e.X/e.Y 就是鼠标在画布上的位置

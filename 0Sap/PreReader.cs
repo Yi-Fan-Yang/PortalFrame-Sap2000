@@ -51,13 +51,23 @@ namespace PortalFrame._0Sap
                 string p1 = "", p2 = "";
                 // 问 SAP：这根杆件的两端是哪两个节点
                 _sapModel.FrameObj.GetPoints(name, ref p1, ref p2);
-                result[name]=new FrameData { Name = name, StartJoint = p1, EndJoint = p2 };
+                // 读两端坐标算长度
+                double x1 = 0, y1 = 0, z1 = 0;
+                double x2 = 0, y2 = 0, z2 = 0;
+                _sapModel.PointObj.GetCoordCartesian(p1, ref x1, ref y1, ref z1);
+                _sapModel.PointObj.GetCoordCartesian(p2, ref x2, ref y2, ref z2);
+                double len = Math.Sqrt(
+                    (x2 - x1) * (x2 - x1) +
+                    (y2 - y1) * (y2 - y1) +
+                    (z2 - z1) * (z2 - z1));
+
+                result[name] = new FrameData { Name = name, StartJoint = p1, EndJoint = p2, Length = len };
             }
             return result;
         }
 
 
-
+        
 
         //===================Property=====================
 
@@ -89,9 +99,9 @@ namespace PortalFrame._0Sap
         }
 
         //读取Frame截面定义表，并自动分类（变截面/等截面）
-        public Dictionary<string, SectionData> GetAllSections()
+        public Dictionary<string, SectionBase> GetAllSections()
         {
-            var result = new Dictionary<string, SectionData>();
+            var result = new Dictionary<string, SectionBase>();
             int n = 0;
             string[] names = null!;
             _sapModel.PropFrame.GetNameList(ref n, ref names);
@@ -118,7 +128,6 @@ namespace PortalFrame._0Sap
             int n = 0;
             string[] names = null!;
             _sapModel.FrameObj.GetNameList(ref n, ref names);
-
             for (int i = 0; i < n; i++)
             {
                 string section = "";
@@ -128,15 +137,14 @@ namespace PortalFrame._0Sap
             }
             return result;
         }
+        // 按比例 ratio 插值截面属性（门刚变截面用）
 
 
 
         //==================Private======================
-        // 读截面的完整数据
-        private SectionData GetSectionData(string sectionName)
+        // 读截面的完整数据,返回基类（等截面→HSectionData，变截面→TaperedSectionData）
+        private SectionBase GetSectionData(string sectionName)
         {
-            var data = new SectionData { Name = sectionName };
-
             int n = 0;
             string[] startSec = null!, endSec = null!;
             double[] myLength = null!;
@@ -152,47 +160,74 @@ namespace PortalFrame._0Sap
             if (ret == 0)
             {
                 // ===== 变截面 =====
-                data.IsTapered = true;
-                data.EI33Type = ei33[0];
-                data.EI22Type = ei22[0];
-
-                GetISection(startSec[0],
-                    out data.H1, out data.TopB1, out data.TopTf1, out data.BotB1, out data.BotTf1,
-                    out data.Tw1, out data.Fillet1, out data.MatProp,
-                    out data.A1, out data.As2_1, out data.As3_1, out data.J1,
-                    out data.I22_1, out data.I33_1, out data.S22_1, out data.S33_1,
-                    out data.Z22_1, out data.Z33_1, out data.R22_1, out data.R33_1);
-
-                GetISection(endSec[0],
-                    out data.H2, out data.TopB2, out data.TopTf2, out data.BotB2, out data.BotTf2,
-                    out data.Tw2, out data.Fillet2, out _,
-                    out data.A2, out data.As2_2, out data.As3_2, out data.J2,
-                    out data.I22_2, out data.I33_2, out data.S22_2, out data.S33_2,
-                    out data.Z22_2, out data.Z33_2, out data.R22_2, out data.R33_2);
+                var Start = ReadHSection(startSec[0]);
+                var End = ReadHSection(endSec[0]);
+                return new TaperedSectionData
+                {
+                    Name = sectionName,
+                    IsTapered = true,
+                    MatProp = Start.MatProp,
+                    Start = Start,
+                    End = End,
+                    EI33Type = ei33[0],
+                    EI22Type = ei22[0]
+                };
             }
             else
             {
                 // ===== 等截面 =====
-                data.IsTapered = false;
-                GetISection(sectionName,
-                    out data.H1, out data.TopB1, out data.TopTf1, out data.BotB1, out data.BotTf1,
-                    out data.Tw1, out data.Fillet1, out data.MatProp,
-                    out data.A1, out data.As2_1, out data.As3_1, out data.J1,
-                    out data.I22_1, out data.I33_1, out data.S22_1, out data.S33_1,
-                    out data.Z22_1, out data.Z33_1, out data.R22_1, out data.R33_1);
-
-                // 大端=小端
-                data.H2 = data.H1; data.TopB2 = data.TopB1; data.TopTf2 = data.TopTf1;
-                data.BotB2 = data.BotB1; data.BotTf2 = data.BotTf1;
-                data.Tw2 = data.Tw1; data.Fillet2 = data.Fillet1;
-                data.A2 = data.A1; data.As2_2 = data.As2_1; data.As3_2 = data.As3_1;
-                data.J2 = data.J1; data.I22_2 = data.I22_1; data.I33_2 = data.I33_1;
-                data.S22_2 = data.S22_1; data.S33_2 = data.S33_1;
-                data.Z22_2 = data.Z22_1; data.Z33_2 = data.Z33_1;
-                data.R22_2 = data.R22_1; data.R33_2 = data.R33_1;
+                var sec = ReadHSection(sectionName);
+                sec.Name = sectionName;
+                sec.IsTapered = false;
+                return sec;
             }
+        }
+        // 读单个 H 形截面
+        private HSectionData ReadHSection(string name)
+        {
+            string fileName = "", matProp = "";
+            double h = 0, topB = 0, topTf = 0, tw = 0, botB = 0, botTf = 0, fillet = 0;
+            int color = 0;
+            string notes = "", guid = "";
 
-            return data;
+            _sapModel.PropFrame.GetISection_1(
+                name,
+                ref fileName, ref matProp,
+                ref h, ref topB, ref topTf, ref tw,
+                ref botB, ref botTf, ref fillet,
+                ref color, ref notes, ref guid);
+
+            double A = 0, as2 = 0, as3 = 0, J = 0, i22 = 0, i33 = 0;
+            double s22 = 0, s33 = 0, z22 = 0, z33 = 0, r22 = 0, r33 = 0;
+            _sapModel.PropFrame.GetSectProps(
+                name,
+                ref A, ref as2, ref as3, ref J,
+                ref i22, ref i33, ref s22, ref s33,
+                ref z22, ref z33, ref r22, ref r33);
+
+            return new HSectionData
+            {
+                MatProp = matProp,
+                H = h,
+                TopB = topB,
+                TopTf = topTf,
+                BotB = botB,
+                BotTf = botTf,
+                Tw = tw,
+                Fillet = fillet,
+                A = A,
+                As2 = as2,
+                As3 = as3,
+                J = J,
+                I22 = i22,
+                I33 = i33,
+                S22 = s22,
+                S33 = s33,
+                Z22 = z22,
+                Z33 = z33,
+                R22 = r22,
+                R33 = r33
+            };
         }
         // 读钢材材料属性
         private MaterialData GetMaterialSteel(string materialName)
@@ -212,38 +247,6 @@ namespace PortalFrame._0Sap
             mat.Fy = fy;
             mat.Fu = fu;
             return mat;
-        }
-        // 读单个 H 形截面完整数据
-        private void GetISection(string name,
-            out double h, out double topB, out double topTf,
-            out double botB, out double botTf,
-            out double tw, out double fillet, out string matProp,
-            out double A, out double as2, out double as3, out double J,
-            out double i22, out double i33,
-            out double s22, out double s33,
-            out double z22, out double z33,
-            out double r22, out double r33)
-        {
-            string fileName = "";
-            h = topB = topTf = botB = botTf = tw = fillet = 0;
-            matProp = "";
-            int color = 0;
-            string notes = "", guid = "";
-
-            _sapModel.PropFrame.GetISection_1(
-                name,
-                ref fileName, ref matProp,
-                ref h, ref topB, ref topTf, ref tw,
-                ref botB, ref botTf, ref fillet,
-                ref color, ref notes, ref guid);   // color/notes/guid 忽略
-
-            A = as2 = as3 = J = i22 = i33 = s22 = s33 = z22 = z33 = r22 = r33 = 0;
-
-            _sapModel.PropFrame.GetSectProps(
-                name,
-                ref A, ref as2, ref as3, ref J,
-                ref i22, ref i33, ref s22, ref s33,
-                ref z22, ref z33, ref r22, ref r33);
         }
 
 

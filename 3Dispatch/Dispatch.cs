@@ -1,5 +1,6 @@
 ﻿using PortalFrame._0Sap;
 using PortalFrame._1Model;
+using PortalFrame._2Check;
 using PortalFrame._5data;
 using PortalFrame.Model;
 using System;
@@ -26,40 +27,54 @@ namespace PortalFrame._3Dispatch
         // 读取模型：一次性把所有数据拉进 DataStore
         public void ReadAllData()
         {
-            // ===== 前处理 =====
+            // ===== 1. 读原始数据 =====
             _store.Joints = _pre.GetAllJoints();
             _store.Frames = _pre.GetAllFrames();
             _store.Sections = _pre.GetAllSections();
             _store.Materials = _pre.GetAllMaterials();
             _store.FrameSectionMap = _pre.GetFrameSectionMap();
-
-            // ===== 后处理：组合列表 =====
             _store.Combos = _post.GetAllComboNames();
 
-            // ===== 后处理：所有组合的内力 =====
             foreach (var combo in _store.Combos)
             {
                 _store.Forces[combo] = _post.GetAllFrameForces(combo);
             }
-            // ===== 把杆件-截面-材料串起来 =====
-            _store.Members.Clear();
-            foreach (var kv in _store.Frames)
-            {
-                string frameName = kv.Key;
-                string secName = _store.FrameSectionMap[frameName];
-                var sec = _store.Sections[secName];
-                var mat = _store.Materials[sec.MatProp];
 
-                _store.Members[frameName] = new MemberData
-                {
-                    Name = frameName,
-                    SectionName = secName,
-                    Frame = kv.Value,
-                    Section = sec,
-                    Material = mat
-                };
-            }
-
+            // ===== 2. 数据预处理 =====
+            var builder = new MemberBuilder(_store);
+            builder.BuildMembers();
+            builder.InterpolateStations();
         }
+
+        // 运行验算：遍历所有杆件所有测站，调抗弯强度
+        public void RunCheck(string comboName)
+        {
+            var flexure = new FlexureCheck();
+            _store.CheckResults.Clear();
+
+            foreach (var member in _store.Members.Values)
+            {
+                var stations = _store.Forces[comboName][member.Name];
+                var results = new List<CheckResult>();
+
+                foreach (var st in stations)
+                {
+                    // 拿该测站的截面属性
+                    HSectionData sec;
+                    if (member.Section.IsTapered)
+                        sec = member.StationSections[st.Station];
+                    else
+                        sec = (HSectionData)member.Section;
+
+                    // 验算抗弯强度
+                    var check = flexure.Check(st.M3, sec.S33, member.Material.Fy);
+                    check.Station = st.Station;
+                    results.Add(check);
+                }
+
+                _store.CheckResults[member.Name] = results;
+            }
+        }
+
     }
 }
