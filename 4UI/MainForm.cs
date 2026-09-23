@@ -1,5 +1,9 @@
 ﻿using CSiAPIv1;
+using PortalFrame._0Sap;
+using PortalFrame._2Check;
 using PortalFrame._3Dispatch;
+using PortalFrame._5data;
+using System.Linq;
 using System.Text;
 
 namespace PortalFrame._4UI
@@ -8,8 +12,12 @@ namespace PortalFrame._4UI
     {
         private cPluginCallback _pluginCallback = null!;
         private int _errorCode = 0;
-        private _0Sap.SapModelReader _reader = null!;
+        private cSapModel _sapModel = null!;
+        private PreReader _pre = null!;
+        private PostReader _post = null!;
         private Dispatch _dispatch = null!;
+        private DataStore _store = new();
+
 
         private Button _btnReadModel = null!;
         private DoubleBufferedPanel _canvas = null!;
@@ -23,7 +31,7 @@ namespace PortalFrame._4UI
         {
             Text = "门式刚架验算插件";
             Width = 800;
-            Height = 600;
+            Height = 700;
             StartPosition = FormStartPosition.CenterScreen;
 
             DefineControls();   // 第①步：创建控件
@@ -66,20 +74,26 @@ namespace PortalFrame._4UI
 
         public void Connect(ref cSapModel sapModel, ref cPluginCallback pluginCallback)
         {
+            _sapModel = sapModel;
             _pluginCallback = pluginCallback;
-            _reader = new _0Sap.SapModelReader(sapModel);
-            _dispatch = new Dispatch(_reader);
+            _pre = new PreReader(ref sapModel);
+            _post = new PostReader(ref sapModel);
+            _dispatch = new Dispatch(_pre, _post, _store);
             _renderer = new ModelRenderer();
         }
 
         private void BtnReadModel_Click(object? sender, EventArgs e)
         {
-            // 1. 读数据
-            _dispatch.ReadModel();
-            // 2. 把数据交给渲染器
-            _renderer.SetData(_dispatch.GetJoints(), _dispatch.GetFrames());
-            // 3. 请画布重画（会自动触发 Canvas_Paint）
+            _dispatch.ReadAllData();           // ← 只调这一行，具体逻辑在 Dispatch 里
+
+            _renderer.SetData(_store.Joints, _store.Frames);
             _canvas.Invalidate();
+
+            MessageBox.Show(
+                $"读取完成：\n" +
+                $"节点 {_store.Joints.Count}，杆件 {_store.Frames.Count}\n" +
+                $"截面 {_store.Sections.Count}，材料 {_store.Materials.Count}\n" +
+                $"组合 {_store.Combos.Count}");
         }
 
         private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
@@ -96,7 +110,7 @@ namespace PortalFrame._4UI
         // 鼠标按下：记下来"按着了"，记下位置
         private void Canvas_MouseDown(object? sender, MouseEventArgs e)
         {
-            if(e.Button==MouseButtons.Middle)
+            if (e.Button == MouseButtons.Middle)
             {
                 _lastMousePos = e.Location;
                 if ((ModifierKeys & Keys.Shift) != 0) _dragMode = DragMode.Rotate;
@@ -122,6 +136,12 @@ namespace PortalFrame._4UI
         {
             _dragMode = DragMode.None;
         }
+
+        private void InitializeComponent()
+        {
+
+        }
+
         private void Canvas_MouseWheel(object? sender, MouseEventArgs e)
         {
             _renderer.Zoom(e.Delta, e.X, e.Y);   // e.Delta 是滚轮滚动量，向上为正;e.X/e.Y 就是鼠标在画布上的位置

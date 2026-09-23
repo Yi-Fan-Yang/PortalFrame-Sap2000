@@ -27,8 +27,4 @@
 		</Reference>
 	</ItemGroup>
 
-	<ItemGroup>
-	  <Folder Include="2Design\" />
-	</ItemGroup>
-
 </Project>

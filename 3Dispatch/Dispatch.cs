@@ -1,5 +1,7 @@
 ﻿using PortalFrame._0Sap;
 using PortalFrame._1Model;
+using PortalFrame._5data;
+using PortalFrame.Model;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,58 +12,54 @@ namespace PortalFrame._3Dispatch
 {
     public class Dispatch
     {
-        private SapModelReader _reader;
-        private Dictionary<string, JointData> _joints = new();
-        private Dictionary<string, FrameData> _frames = new();
-        public Dictionary<string, JointData> GetJoints() => _joints;
+        private PreReader _pre;
+        private PostReader _post;
+        private DataStore _store;
 
-        public Dictionary<string, FrameData> GetFrames() => _frames;
-
-
-        public Dispatch(SapModelReader reader)
+        public Dispatch(PreReader pre, PostReader post, DataStore store)
         {
-            _reader = reader;
+            _pre = pre;
+            _post = post;
+            _store = store;
         }
 
-        // 读模型，把数据存到字段里
-        public void ReadModel()
+        // 读取模型：一次性把所有数据拉进 DataStore
+        public void ReadAllData()
         {
-            _joints = _reader.GetAllJoints();
-            _frames = _reader.GetAllFrames();
-        }
+            // ===== 前处理 =====
+            _store.Joints = _pre.GetAllJoints();
+            _store.Frames = _pre.GetAllFrames();
+            _store.Sections = _pre.GetAllSections();
+            _store.Materials = _pre.GetAllMaterials();
+            _store.FrameSectionMap = _pre.GetFrameSectionMap();
 
-        // 从字段里取数据，拼一段摘要文字
-        public string BuildSummaryText()
-        {
-            var sb = new StringBuilder();
-            sb.AppendLine($"节点数：{_joints.Count}，杆件数：{_frames.Count}");
-            return sb.ToString();
-        }
+            // ===== 后处理：组合列表 =====
+            _store.Combos = _post.GetAllComboNames();
 
-        // 读模型，拼好要显示的文本，返回给 MainForm
-        public string ReadModelAndBuildText()
-        {
-            var joints = _reader.GetAllJoints();
-            var frames = _reader.GetAllFrames();
-
-            var sb = new StringBuilder();
-            sb.AppendLine($"节点数：{joints.Count}，杆件数：{frames.Count}");
-            sb.AppendLine("");
-
-            sb.AppendLine("节点坐标：");
-            foreach (var j in joints.Values)
+            // ===== 后处理：所有组合的内力 =====
+            foreach (var combo in _store.Combos)
             {
-                sb.AppendLine($"  {j.Name}: ({j.X:F2}, {j.Y:F2}, {j.Z:F2})");
+                _store.Forces[combo] = _post.GetAllFrameForces(combo);
+            }
+            // ===== 把杆件-截面-材料串起来 =====
+            _store.Members.Clear();
+            foreach (var kv in _store.Frames)
+            {
+                string frameName = kv.Key;
+                string secName = _store.FrameSectionMap[frameName];
+                var sec = _store.Sections[secName];
+                var mat = _store.Materials[sec.MatProp];
+
+                _store.Members[frameName] = new MemberData
+                {
+                    Name = frameName,
+                    SectionName = secName,
+                    Frame = kv.Value,
+                    Section = sec,
+                    Material = mat
+                };
             }
 
-            sb.AppendLine("");
-            sb.AppendLine("杆件连接：");
-            foreach (var f in frames.Values)
-            {
-                sb.AppendLine($"  {f.Name}: {f.StartJoint} → {f.EndJoint}");
-            }
-
-            return sb.ToString();
         }
     }
 }

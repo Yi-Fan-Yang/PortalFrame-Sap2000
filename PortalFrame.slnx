@@ -1,4 +1,8 @@
 <Solution>
-  <Folder Name="/解决方案项/" />
-  <Project Path="PortalFrame.csproj" />
+  <Configurations>
+    <Platform Name="x64" />
+  </Configurations>
+  <Project Path="PortalFrame.csproj">
+    <Platform Project="x64" />
+  </Project>
 </Solution>
