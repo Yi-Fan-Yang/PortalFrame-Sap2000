@@ -11,7 +11,7 @@ namespace PortalFrame._1Model
         // 几何
         public double H, TopB, TopTf, BotB, BotTf, Tw, Fillet;
         // 属性
-        public double A, As2, As3, J, I22, I33, S22, S33, Z22, Z33, R22, R33;
+        public double Area, As2, As3, J, I22, I33, S22, S33, Z22, Z33, R22, R33;
         // 材料
     }
 }

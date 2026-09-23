@@ -98,7 +98,7 @@ namespace PortalFrame._0Sap
             return result;
         }
 
-        //读取Frame截面定义表，并自动分类（变截面/等截面）
+        //读取Frame截面定义表，
         public Dictionary<string, SectionBase> GetAllSections()
         {
             var result = new Dictionary<string, SectionBase>();
@@ -111,7 +111,7 @@ namespace PortalFrame._0Sap
                 try
                 {
                     var sec = GetSectionData(names[i]);
-                    result[names[i]] = sec;
+                    if (sec != null) result[names[i]] = sec;
                 }
                 catch
                 {
@@ -143,7 +143,7 @@ namespace PortalFrame._0Sap
 
         //==================Private======================
         // 读截面的完整数据,返回基类（等截面→HSectionData，变截面→TaperedSectionData）
-        private SectionBase GetSectionData(string sectionName)
+        private SectionBase? GetSectionData(string sectionName)
         {
             int n = 0;
             string[] startSec = null!, endSec = null!;
@@ -162,6 +162,7 @@ namespace PortalFrame._0Sap
                 // ===== 变截面 =====
                 var Start = ReadHSection(startSec[0]);
                 var End = ReadHSection(endSec[0]);
+                if (Start == null || End == null) return null;
                 return new TaperedSectionData
                 {
                     Name = sectionName,
@@ -177,25 +178,27 @@ namespace PortalFrame._0Sap
             {
                 // ===== 等截面 =====
                 var sec = ReadHSection(sectionName);
+                if (sec == null) return null;
                 sec.Name = sectionName;
                 sec.IsTapered = false;
                 return sec;
             }
         }
         // 读单个 H 形截面
-        private HSectionData ReadHSection(string name)
+        private HSectionData? ReadHSection(string name)
         {
             string fileName = "", matProp = "";
             double h = 0, topB = 0, topTf = 0, tw = 0, botB = 0, botTf = 0, fillet = 0;
             int color = 0;
             string notes = "", guid = "";
 
-            _sapModel.PropFrame.GetISection_1(
+            int ret1 = _sapModel.PropFrame.GetISection_1(
                 name,
                 ref fileName, ref matProp,
                 ref h, ref topB, ref topTf, ref tw,
                 ref botB, ref botTf, ref fillet,
                 ref color, ref notes, ref guid);
+            if (ret1 != 0) return null;
 
             double A = 0, as2 = 0, as3 = 0, J = 0, i22 = 0, i33 = 0;
             double s22 = 0, s33 = 0, z22 = 0, z33 = 0, r22 = 0, r33 = 0;
@@ -215,7 +218,7 @@ namespace PortalFrame._0Sap
                 BotTf = botTf,
                 Tw = tw,
                 Fillet = fillet,
-                A = A,
+                Area = A,
                 As2 = as2,
                 As3 = as3,
                 J = J,

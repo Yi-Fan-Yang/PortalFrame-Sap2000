@@ -1,6 +1,5 @@
 ﻿using PortalFrame._1Model;
 using PortalFrame._5data;
-using PortalFrame.Model;
 
 namespace PortalFrame._3Dispatch
 {
@@ -22,8 +21,8 @@ namespace PortalFrame._3Dispatch
             {
                 string frameName = kv.Key;
                 string secName = _store.FrameSectionMap[frameName];
-                var sec = _store.Sections[secName];
-                var mat = _store.Materials[sec.MatProp];
+                if (!_store.Sections.TryGetValue(secName, out var sec))continue;   // 非H型钢，跳过
+                if (!_store.Materials.TryGetValue(sec.MatProp, out var mat))continue;   // 材料不是钢材，跳过
 
                 _store.Members[frameName] = new MemberData
                 {
@@ -83,7 +82,7 @@ namespace PortalFrame._3Dispatch
                 BotTf = Lerp(sec.Start.BotTf, sec.End.BotTf, tLinear),
                 Tw = Lerp(sec.Start.Tw, sec.End.Tw, tLinear),
                 Fillet = Lerp(sec.Start.Fillet, sec.End.Fillet, tLinear),
-                A = Lerp(sec.Start.A, sec.End.A, tLinear),
+                Area = Lerp(sec.Start.Area, sec.End.Area, tLinear),
                 As2 = Lerp(sec.Start.As2, sec.End.As2, tLinear),
                 As3 = Lerp(sec.Start.As3, sec.End.As3, tLinear),
                 J = Lerp(sec.Start.J, sec.End.J, tLinear),

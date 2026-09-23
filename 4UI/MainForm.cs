@@ -21,6 +21,7 @@ namespace PortalFrame._4UI
 
         private Button _btnReadModel = null!;
         private Button _btnRunCheck = null!;
+        private Button _btnSelfTest = null!;
         private DoubleBufferedPanel _canvas = null!;
         private ModelRenderer _renderer = null!;
         private enum DragMode { None, Rotate, Pan }
@@ -44,6 +45,7 @@ namespace PortalFrame._4UI
             _btnReadModel = new Button();
             _canvas = new DoubleBufferedPanel();
             _btnRunCheck = new Button();
+            _btnSelfTest = new Button();
 
         }
         private void LayoutControls()
@@ -55,6 +57,10 @@ namespace PortalFrame._4UI
             _btnRunCheck.Text = "运行验算";
             _btnRunCheck.Size = new Size(160, 30);
             _btnRunCheck.Location = new Point(180, 10);
+
+            _btnSelfTest.Text = "算法自检";
+            _btnSelfTest.Size = new Size(160, 30);
+            _btnSelfTest.Location = new Point(350, 10);
 
             _canvas.BackColor = Color.White;
             _canvas.Location = new Point(10, 50);
@@ -79,6 +85,8 @@ namespace PortalFrame._4UI
             _btnRunCheck.Click += BtnRunCheck_Click;
             _canvas.Paint += Canvas_Paint;
             FormClosing += MainForm_FormClosing;
+            _btnSelfTest.Click += BtnSelfTest_Click;
+
         }
 
         public void Connect(ref cSapModel sapModel, ref cPluginCallback pluginCallback)
@@ -106,16 +114,14 @@ namespace PortalFrame._4UI
         }
         private void BtnRunCheck_Click(object? sender, EventArgs e)
         {
-            string combo = _store.Combos.First();   // 临时：先取第一个组合
-            _dispatch.RunCheck(combo);
 
-            // 临时验证：找最大利用率
-            var maxUtil = _store.CheckResults.Values
-                .SelectMany(r => r)
-                .Max(c => c.Utilization);
-
-            MessageBox.Show($"验算完成\n最大利用率：{maxUtil:F3}");
         }
+        private void BtnSelfTest_Click(object? sender, EventArgs e)
+        {
+            string result = PortalFrame._2Check.SelfTest.Run();
+            MessageBox.Show(result);
+        }
+
 
 
         private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
