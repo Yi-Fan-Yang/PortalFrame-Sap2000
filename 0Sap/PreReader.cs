@@ -208,6 +208,17 @@ namespace PortalFrame._0Sap
                 ref i22, ref i33, ref s22, ref s33,
                 ref z22, ref z33, ref r22, ref r33);
 
+            // 算形心位置（到顶部距离 yc）
+            double A1 = topB * topTf;           // 上翼缘面积
+            double hw = h - topTf - botTf;  // 腹板高度
+            double Aweb = tw * hw;                   // 腹板面积
+            double A2 = botB * botTf;           // 下翼缘面积
+
+            double yc = (A1 * topTf / 2
+                       + Aweb * (topTf + hw / 2)
+                       + A2 * (topTf + hw + botTf / 2))
+                       / A;
+
             return new HSectionData
             {
                 MatProp = matProp,
@@ -225,7 +236,8 @@ namespace PortalFrame._0Sap
                 I22 = i22,
                 I33 = i33,
                 S22 = s22,
-                S33 = s33,
+                S33_Top = i33 / yc,
+                S33_Bot = i33 / (h - yc),
                 Z22 = z22,
                 Z33 = z33,
                 R22 = r22,
@@ -237,18 +249,15 @@ namespace PortalFrame._0Sap
         {
             var mat = new MaterialData { Name = materialName };
 
-            double fy = 0, fu = 0, eFy = 0, eFu = 0;
-            int ssType = 0, ssHysType = 0;
-            double strainHardening = 0, strainMax = 0, strainRupture = 0, finalSlope = 0;
+            // 根据名称判断牌号（SAP里就是"Q235"或"Q355"）
+            string lower = materialName.Trim().ToUpper();
+            if (lower.Contains("Q355"))
+                mat.Grade = SteelGrade.Q355;
+            else if (lower.Contains("Q235"))
+                mat.Grade = SteelGrade.Q235;
+            else
+                mat.Grade = SteelGrade.Q235;   // 默认Q235
 
-            _sapModel.PropMaterial.GetOSteel_1(
-                materialName,
-                ref fy, ref fu, ref eFy, ref eFu,
-                ref ssType, ref ssHysType,
-                ref strainHardening, ref strainMax, ref strainRupture, ref finalSlope);
-
-            mat.Fy = fy;
-            mat.Fu = fu;
             return mat;
         }
 

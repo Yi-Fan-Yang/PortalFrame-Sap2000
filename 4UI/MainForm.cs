@@ -22,6 +22,7 @@ namespace PortalFrame._4UI
         private Button _btnReadModel = null!;
         private Button _btnRunCheck = null!;
         private Button _btnSelfTest = null!;
+        private Button _btnTestDetail = new() { Text = "测试详情窗口" };
         private DoubleBufferedPanel _canvas = null!;
         private ModelRenderer _renderer = null!;
         private enum DragMode { None, Rotate, Pan }
@@ -62,6 +63,9 @@ namespace PortalFrame._4UI
             _btnSelfTest.Size = new Size(160, 30);
             _btnSelfTest.Location = new Point(350, 10);
 
+            _btnTestDetail.Location = new Point(200, 10);
+            Controls.Add(_btnTestDetail);
+
             _canvas.BackColor = Color.White;
             _canvas.Location = new Point(10, 50);
             _canvas.Size = new Size(760, 510);
@@ -86,6 +90,12 @@ namespace PortalFrame._4UI
             _canvas.Paint += Canvas_Paint;
             FormClosing += MainForm_FormClosing;
             _btnSelfTest.Click += BtnSelfTest_Click;
+
+            _btnTestDetail.Click += (s, e) =>
+            {
+                var form = new MemberDetailForm();
+                form.Show();
+            };
 
         }
 

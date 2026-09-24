@@ -1,4 +1,5 @@
 ﻿using PortalFrame._1Model;
+using PortalFrame._2Check;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -24,6 +25,6 @@ namespace PortalFrame._5data
         public Dictionary<string, Dictionary<string, List<ForceData>>> Forces = new();
 
         // 验算结果
-        public Dictionary<string, CheckResult> CheckResults = new();
+        public Dictionary<string, CheckItem> CheckResults = new();
     }
 }

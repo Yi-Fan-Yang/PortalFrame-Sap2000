@@ -93,7 +93,8 @@ namespace PortalFrame._3Dispatch
 
                 I33 = Lerp(sec.Start.I33, sec.End.I33, tI33),
                 I22 = Lerp(sec.Start.I22, sec.End.I22, tI22),
-                S33 = Lerp(sec.Start.S33, sec.End.S33, tS33),
+                S33_Top = Lerp(sec.Start.S33_Top, sec.End.S33_Top, tS33),
+                S33_Bot = Lerp(sec.Start.S33_Bot, sec.End.S33_Bot, tS33),
                 S22 = Lerp(sec.Start.S22, sec.End.S22, tS22)
             };
         }

@@ -1,30 +1,52 @@
-﻿using PortalFrame._1Model;
+﻿using CSiAPIv1;
+using PortalFrame._1Model;
 
 namespace PortalFrame._2Check
 {
     public static class SectionUtils
     {
-        // 宽厚比限值检查，返回利用率
-        public static (double bfUtil, double hwUtil) CheckWidthThickness(HSectionData sec, MaterialData mat)
+        /// <summary>
+        /// 板件宽厚比验算（翼缘+腹板）,等截面算一次，变截面算大小头
+        /// </summary>
+        public static List<(string label, double bfUtil, double hwUtil)> CheckWidthThickness(MemberData member)
         {
-            double fy = mat.Fy;
-            double k = Math.Sqrt(235.0 / fy);
+            var results = new List<(string, double, double)>();
 
-            // --- 翼缘宽厚比（上下翼缘取大值）---
-            double bTop = (sec.TopB - sec.Tw) / 2.0;
-            double bBot = (sec.BotB - sec.Tw) / 2.0;
-            double bfActual = Math.Max(bTop / sec.TopTf, bBot / sec.BotTf);
-            double bfLimit = 15.0 * k;
-            double bfUtil = bfActual / bfLimit;
+            // 收集要验算的截面
+            var sectionsToCheck = new List<(string label, HSectionData sec)>();
 
-            // --- 腹板高厚比 ---
-            double h0 = sec.H - sec.TopTf - sec.BotTf;
-            double hwActual = h0 / sec.Tw;
-            double hwLimit = 250.0 * k;
-            double hwUtil = hwActual / hwLimit;
+            if (member.Section is TaperedSectionData tapered)
+            {
+                sectionsToCheck.Add(("Start", tapered.Start));
+                sectionsToCheck.Add(("End", tapered.End));
+            }
+            else if (member.Section is HSectionData sec)
+            {
+                sectionsToCheck.Add(("整体", sec));
+            }
 
-            return (bfUtil, hwUtil);
+            foreach (var (label, sec) in sectionsToCheck)
+            {
+                double fy = member.Material.GetDesignValues(sec.Tw).fy;
+
+                // 翼缘外伸宽度
+                double bf = (sec.TopB - sec.Tw - 2 * sec.Fillet) / 2.0;
+                double bRatio = bf / sec.TopTf;
+                double bfLimit = 15.0 * Math.Sqrt(235.0 / fy);
+                double bfUtil = bRatio / bfLimit;
+
+                // 腹板高厚比
+                double hw = sec.H - sec.TopTf - sec.BotTf;
+                double hwRatio = hw / sec.Tw;
+                double hwLimit = 250.0 * Math.Sqrt(235.0 / fy);
+                double hwUtil = hwRatio / hwLimit;
+
+                results.Add((label, bfUtil, hwUtil));
+            }
+
+            return results;
         }
+
 
         /// <summary>
         /// 计算腹板有效宽度 he（GB51022-2015 第7.1.1条）
@@ -34,17 +56,21 @@ namespace PortalFrame._2Check
         /// <param name="M">弯矩绝对值</param>
         /// <param name="fy">钢材屈服强度</param>
         /// <returns>Ae有效面积, WeTop上边缘有效模量, WeBottom下边缘有效模量</returns>
-        public static (double Ae, double WeTop, double WeBottom) EffectiveSection(HSectionData sec, double N, double M, double fy)
+        public static void EffectiveSection(MemberData member, ForceData force)
         {
             {
-                double hw = sec.H - sec.TopTf - sec.BotTf;
+                var sec = member.StationSections[force.Station];
                 double tw = sec.Tw;
+                double fy = member.Material.GetDesignValues(tw).fy;
+                double N = force.P;
+                double M = Math.Abs(force.M3);
+                double hw = sec.H - sec.TopTf - sec.BotTf;
                 double TopB = sec.TopB;
                 double BotB = sec.BotB;
 
                 // ===== 第1步：两个边缘应力（正拉负压）=====
-                double edgeA = N / sec.Area + M / sec.S33;
-                double edgeB = N / sec.Area - M / sec.S33;
+                double edgeA = N / sec.Area + M / Math.Min(sec.S33_Top, sec.S33_Bot);
+                double edgeB = N / sec.Area - M / Math.Min(sec.S33_Top, sec.S33_Bot);
 
                 double sigma1, sigma2;
                 if (Math.Abs(edgeA) >= Math.Abs(edgeB))
@@ -147,13 +173,68 @@ namespace PortalFrame._2Check
                 double weTop = iEff / yc;
                 double weBottom = iEff / (sec.H - yc);
 
-                return (ae, weTop, weBottom);
+                force.Ae = ae;
+                force.WeTop = weTop;
+                force.WeBottom = weBottom;
             }
         }
 
 
-        // 腹板受剪承载力 Vd
-        public static double ShearCapacity(HSectionData sec, MaterialData mat, double stiffenerSpacing)
-        { /* TODO */ return 0; }
+        /// <summary>
+        /// 腹板受剪承载力 Vd（GB51022-2015 第7.1.1条）
+        /// </summary>
+        /// <param name="member">杆件完整信息</param>
+        /// <param name="stationS">测站位置（从I端算，mm）</param>
+        /// <returns>Vd (N)</returns>
+        public static double ShearCapacity(MemberData member, ForceData force)
+        {
+            // 1. 取当前测站截面
+            var sec = member.StationSections[force.Station];
+            double hw1 = sec.H - sec.TopTf - sec.BotTf;
+            double tw = sec.Tw;
+            double fy = member.Material.GetDesignValues(tw).fy;
+
+            // 2. 取小端截面（算楔率）
+            double hw0;
+            if (member.Section is TaperedSectionData tapered)
+            {
+                // 变截面：小端腹板高
+                double hStart = tapered.Start.H - tapered.Start.TopTf - tapered.Start.BotTf;
+                double hEnd = tapered.End.H - tapered.End.TopTf - tapered.End.BotTf;
+                hw0 = Math.Min(hStart, hEnd);
+            }
+            else
+            {
+                // 等截面：hw0 = hw1
+                hw0 = hw1;
+            }
+
+            // 3. 楔率 γp
+            double gammaP = hw1 / hw0 - 1.0;
+
+            // 4. χap 楔率折减（αp 取 1.0，后面用户可调）
+            double alphaP = 1.0;
+            double chiAp = 1.0 - 0.35 * Math.Pow(alphaP, 0.2) * Math.Pow(gammaP, 2.0 / 3.0);
+            if (chiAp < 0) chiAp = 0;
+
+            // 5. kτ = 5.34（不设加劲肋）
+            double kTau = 5.34;
+
+            // 6. λs
+            double lambdaS = (hw1 / tw) / (37.0 * Math.Sqrt(kTau * Math.Sqrt(235.0 / fy)));
+
+            // 7. φps
+            double phiPs = Math.Pow(0.51 + Math.Pow(lambdaS, 0.8), 1.0 / 1.26);
+            if (phiPs > 1.0) phiPs = 1.0;
+
+            // 第8步：fv 按腹板厚度查
+            double fv = member.Material.GetDesignValues(tw).fv;
+
+
+            // 9. Vd
+            double vd = chiAp * phiPs * hw1 * tw * fv;
+
+            return vd;
+        }
     }
 }
