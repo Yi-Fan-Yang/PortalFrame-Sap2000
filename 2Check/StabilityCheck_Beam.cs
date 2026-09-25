@@ -6,10 +6,9 @@ namespace PortalFrame._2Check
     /// 7.1.4 变截面梁整体稳定
     /// 只验算大端，中间参数需要小端数据
     /// </summary>
-    public static class BeamLateralCheck
+    public static class StabilityCheck_Beam
     {
-        public static (double util, string detail) Check(
-            MemberData member, List<ForceData> forces, bool hasBrace)
+        public static void OverallStabilityCheck(MemberData member,List<ForceData> forces,StabilityResult result, bool hasBrace)
         {
             // ===== 第1步：取两个端点的截面和内力 =====
             double tol = 1.0;
@@ -67,7 +66,6 @@ namespace PortalFrame._2Check
             // ===== 第9步：利用率 =====
             double util = M1 / (gammaX * phiB * W1) / f;
 
-            return (util, $"大端：λb={lambdaB:F2}, φb={phiB:F3}, kσ={kSigma:F2}");
         }
 
         // 下面三个方法后面填

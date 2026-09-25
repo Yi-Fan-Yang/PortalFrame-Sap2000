@@ -6,25 +6,25 @@ namespace PortalFrame._3Dispatch
     // 数据预处理：把原始数据串成构件、插值变截面
     public class MemberBuilder
     {
-        private DataStore _store;
+        private PreData _preData;
 
-        public MemberBuilder(DataStore store)
+        public MemberBuilder(PreData store)
         {
-            _store = store;
+            _preData = store;
         }
 
         // 串杆件-截面-材料
         public void BuildMembers()
         {
-            _store.Members.Clear();
-            foreach (var kv in _store.Frames)
+            _preData.Members.Clear();
+            foreach (var kv in _preData.Frames)
             {
                 string frameName = kv.Key;
-                string secName = _store.FrameSectionMap[frameName];
-                if (!_store.Sections.TryGetValue(secName, out var sec))continue;   // 非H型钢，跳过
-                if (!_store.Materials.TryGetValue(sec.MatProp, out var mat))continue;   // 材料不是钢材，跳过
+                string secName = _preData.FrameSectionMap[frameName];
+                if (!_preData.Sections.TryGetValue(secName, out var sec))continue;   // 非H型钢，跳过
+                if (!_preData.Materials.TryGetValue(sec.MatProp, out var mat))continue;   // 材料不是钢材，跳过
 
-                _store.Members[frameName] = new MemberData
+                _preData.Members[frameName] = new MemberData
                 {
                     Name = frameName,
                     SectionName = secName,
@@ -38,8 +38,8 @@ namespace PortalFrame._3Dispatch
         // 变截面杆件：插值各测站的截面属性
         public void InterpolateStations()
         {
-            string firstCombo = _store.Combos.First();
-            foreach (var member in _store.Members.Values)
+            string firstCombo = _preData.Combos.First();
+            foreach (var member in _preData.Members.Values)
             {
                 if (!member.Section.IsTapered) continue;
 
@@ -47,7 +47,7 @@ namespace PortalFrame._3Dispatch
                 double L = member.Frame.Length;
                 if (L == 0) continue;
 
-                var stations = _store.Forces[firstCombo][member.Name];
+                var stations = _preData.Forces[firstCombo][member.Name];
                 foreach (var st in stations)
                 {
                     double ratio = st.Station / L;

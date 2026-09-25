@@ -5,10 +5,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static PortalFrame._5data.CheckPara;
 
 namespace PortalFrame._5data
 {
-    public class DataStore
+    public class PreData
     {
         // 前处理数据
         public Dictionary<string, JointData> Joints = new();
@@ -24,7 +25,6 @@ namespace PortalFrame._5data
         // Key1: 组合名, Key2: 杆件名, Value: 测站内力列表
         public Dictionary<string, Dictionary<string, List<ForceData>>> Forces = new();
 
-        // 验算结果
-        public Dictionary<string, CheckItem> CheckResults = new();
+
     }
 }

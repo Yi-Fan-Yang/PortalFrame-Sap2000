@@ -1,4 +1,6 @@
-﻿namespace PortalFrame._4UI
+﻿using PortalFrame._5data;
+
+namespace PortalFrame._4UI
 {
     public class MemberDetailForm : Form
     {
