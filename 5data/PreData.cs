@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using static PortalFrame._5data.CheckPara;
 
 namespace PortalFrame._5data
 {

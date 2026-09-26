@@ -1,5 +1,6 @@
 ﻿using CSiAPIv1;
 using PortalFrame._1Model;
+using PortalFrame._5data;
 
 namespace PortalFrame._2Check
 {
@@ -81,7 +82,8 @@ namespace PortalFrame._2Check
         /// <param name="M">弯矩绝对值</param>
         /// <param name="fy">钢材屈服强度</param>
         /// <returns>Ae有效面积, WeTop上边缘有效模量, WeBottom下边缘有效模量</returns>
-        public static void EffectiveSection(MemberData member, ForceData force, FlexureStationResult result)
+        public static void EffectiveSection(MemberData member, ForceData force, FlexureStationResult result
+                                , Preferences prefs, OverWrites overwrites)
         {
             var sec = member.StationSections[force.Station];
             double tw = sec.Tw;

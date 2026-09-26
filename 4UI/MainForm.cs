@@ -1,5 +1,6 @@
 ﻿using CSiAPIv1;
 using PortalFrame._0Sap;
+using PortalFrame._1Model;
 using PortalFrame._2Check;
 using PortalFrame._3Dispatch;
 using PortalFrame._5data;
@@ -13,7 +14,6 @@ namespace PortalFrame._4UI
     {
         private cPluginCallback _pluginCallback = null!;
         private int _errorCode = 0;
-        private cSapModel _sapModel = null!;
         private Dispatch _dispatch = null!;
 
         private PreReader _pre = null!;
@@ -25,26 +25,21 @@ namespace PortalFrame._4UI
         private PostData _postData = new();
 
 
-        private Button _btnReadModel = null!;
-        private Button _btnPreferences = null!;
-        private Button _btnOverwrite = null!;
-        private Button _btnCombo = null!;
-        private Button _btnRunCheck = null!;
-        private Button _btnResult = null!;
-        private DoubleBufferedPanel _canvas = null!;
-        private StatusStrip _statusStrip = null!;
-        private ToolStripStatusLabel _lblTotal = null!;
-        private ToolStripStatusLabel _lblSelected = null!;
-        private ToolStripStatusLabel _lblStatus = null!;
-
-
-
+        private Button _btnReadModel = new Button();
+        private Button _btnPreferences = new Button();
+        private Button _btnOverwrite = new Button();
+        private Button _btnCombo = new Button();
+        private Button _btnRunCheck = new Button();
+        private Button _btnResult = new Button();
+        private DoubleBufferedPanel _canvas = new DoubleBufferedPanel();
+        private StatusStrip _statusStrip = new StatusStrip();
+        private ToolStripStatusLabel _lblTotal = new ToolStripStatusLabel();
+        private ToolStripStatusLabel _lblSelected = new ToolStripStatusLabel();
+        private ToolStripStatusLabel _lblStatus = new ToolStripStatusLabel();
 
 
         private ModelRenderer _renderer = null!;
-        private enum DragMode { None, Rotate, Pan }
-        private DragMode _dragMode = DragMode.None;
-        private Point _lastMousePos;             // 上一次鼠标位置
+        private CanvasInteraction _canvasInteraction = null!;
 
 
         public MainForm()
@@ -112,36 +107,36 @@ namespace PortalFrame._4UI
             Controls.Add(_canvas);
             Controls.Add(_statusStrip);
         }
-
-
         private void SetupEvents()
         {
-            _canvas.MouseDown += Canvas_MouseDown;
-            _canvas.MouseMove += Canvas_MouseMove;
-            _canvas.MouseUp += Canvas_MouseUp;
-            _canvas.MouseWheel += Canvas_MouseWheel;
             _canvas.Paint += Canvas_Paint;
+            _canvasInteraction.MemberRightClicked += OnMemberRightClicked;
+
 
             _btnReadModel.Click += BtnReadModel_Click;
             _btnPreferences.Click += btnPreferences_Click;
-            _btnOverwrite.Click += (s, e) => MessageBox.Show("覆盖项窗口（后面做）");
-            _btnCombo.Click += (s, e) => MessageBox.Show("组合窗口（后面做）");
+            _btnOverwrite.Click += btnOverwrite_Click;
+            _btnCombo.Click += btnCombo_Click;
             _btnRunCheck.Click += BtnRunCheck_Click;
-            _btnResult.Click += (s, e) => MessageBox.Show("结果查看（后面做）");
-
+            _btnResult.Click += btnResult_Click;
             FormClosing += MainForm_FormClosing;
         }
 
         public void Connect(ref cSapModel sapModel, ref cPluginCallback pluginCallback)
         {
-            _sapModel = sapModel;
             _pluginCallback = pluginCallback;
             _pre = new PreReader(ref sapModel);
             _post = new PostReader(ref sapModel);
             _dispatch = new Dispatch(_pre, _post, _preData,_prefer,_Writes,_Combos,_postData);
             _renderer = new ModelRenderer();
+            // 初始化画布交互
+            _canvasInteraction = new CanvasInteraction(_renderer, _canvas);
+            _canvasInteraction.SelectionChanged += UpdateStatusBar;
         }
-
+        private void Canvas_Paint(object? sender, PaintEventArgs e)
+        {
+            _renderer.Draw(e.Graphics, _canvas.ClientSize.Width, _canvas.ClientSize.Height);
+        }
         private void BtnReadModel_Click(object? sender, EventArgs e)
         {
             _dispatch.ReadAllData();           // ← 只调这一行，具体逻辑在 Dispatch 里
@@ -163,67 +158,84 @@ namespace PortalFrame._4UI
                 _lblStatus.Text = "首选项已更新";
             }
         }
+        private void btnOverwrite_Click(object? sender, EventArgs e)
+        {
+            MessageBox.Show("覆盖项窗口（后面做）");
+        }
+        private void btnCombo_Click(object? sender, EventArgs e)
+        {
+            var form = new ComboSelectForm(_Combos, _preData.Combos);
+            if (form.ShowDialog() == DialogResult.OK)
+            {
+                _lblStatus.Text = $"已选 {_Combos.SelectedCombos.Count} 个设计组合";
+            }
+        }
         private void BtnRunCheck_Click(object? sender, EventArgs e)
         {
             _lblStatus.Text = "验算中...";
             Application.DoEvents();
 
-            _dispatch.RunCheck();
+            //只验算选中的构件
+            var selected = _renderer.GetSelected();
+            _dispatch.RunCheck(selected.Count > 0 ? selected : null);
 
+            // 把结果传给渲染器着色
+            var utils = _dispatch.GetMemberUtilsByCheckType("汇总");
+            _renderer.SetResults(utils);
+            _canvas.Invalidate();
             _lblStatus.Text = $"验算完成：柱 {_postData.ColumnResults.Count} 根，梁 {_postData.BeamResults.Count} 根";
         }
+        private void btnResult_Click(object? sender, EventArgs e)
+        {
+            var form = new ResultSelectForm();
+            if (form.ShowDialog() == DialogResult.OK)
+            {
+                var utils = _dispatch.GetMemberUtilsByCheckType(form.SelectedCheckType);
+                _renderer.SetResults(utils);
+                _canvas.Invalidate();
 
+                _lblStatus.Text = $"显示结果：{form.SelectedCheckType}";
+            }
+        }
+        private void UpdateStatusBar()
+        {
+            var selected = _renderer.GetSelected();
+            int columnCount = 0;
+            int beamCount = 0;
 
+            foreach (var name in selected)
+            {
+                if (_preData.Members.TryGetValue(name, out var member))
+                {
+                    if (member.Type == MemberType.Column) columnCount++;
+                    else beamCount++;
+                }
+            }
 
+            _lblSelected.Text = $"已选择：柱 {columnCount} 根，梁 {beamCount} 根";
+        }
 
         private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
         {
             _pluginCallback.Finish(_errorCode);
         }
 
-
-
-
-        //=====================画布相关=========================
-        private void Canvas_Paint(object? sender, PaintEventArgs e)
+        private void OnMemberRightClicked(string memberName)
         {
-            // 把画笔和画布大小交给渲染器，让它去画
-            _renderer.Draw(e.Graphics, _canvas.ClientSize.Width, _canvas.ClientSize.Height);
-        }
-        // 鼠标按下：记下来"按着了"，记下位置
-        private void Canvas_MouseDown(object? sender, MouseEventArgs e)
-        {
-            if (e.Button == MouseButtons.Middle)
+            // 判断有没有这根构件的验算结果
+            if (_postData.ColumnResults.ContainsKey(memberName))
             {
-                _lastMousePos = e.Location;
-                if ((ModifierKeys & Keys.Shift) != 0) _dragMode = DragMode.Rotate;
-                else _dragMode = DragMode.Pan;
+                var form = new MemberDetailForm(memberName, _postData);
+                form.ShowDialog();
             }
+            else if (_postData.BeamResults.ContainsKey(memberName))
+            {
+                var form = new MemberDetailForm(memberName, _postData);
+                form.ShowDialog();
+            }
+            // 没结果的话什么都不做
         }
-        // 鼠标移动
-        private void Canvas_MouseMove(object? sender, MouseEventArgs e)
-        {
-            if (_dragMode == DragMode.None) return;
 
-            double dx = e.X - _lastMousePos.X;
-            double dy = e.Y - _lastMousePos.Y;
-            if (_dragMode == DragMode.Rotate) _renderer.Rotate(dx, dy);
-            else if (_dragMode == DragMode.Pan) _renderer.Pan(dx, dy);
-
-            _lastMousePos = e.Location;
-            _canvas.Invalidate();
-
-        }
-        // 鼠标松开：记下来"不按了"
-        private void Canvas_MouseUp(object? sender, MouseEventArgs e)
-        {
-            _dragMode = DragMode.None;
-        }
-        private void Canvas_MouseWheel(object? sender, MouseEventArgs e)
-        {
-            _renderer.Zoom(e.Delta, e.X, e.Y);   // e.Delta 是滚轮滚动量，向上为正;e.X/e.Y 就是鼠标在画布上的位置
-            _canvas.Invalidate();      // 重画
-        }
 
     }
 }

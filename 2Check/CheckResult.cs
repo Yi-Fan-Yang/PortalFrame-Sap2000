@@ -1,4 +1,6 @@
-﻿namespace PortalFrame._2Check
+﻿using CSiAPIv1;
+
+namespace PortalFrame._2Check
 {
 
     // 截面主要几何参数
@@ -30,6 +32,7 @@
         public bool IsTapered;
         public SectionInfo SecBig = new();
         public SectionInfo SecSmall = new();
+        public WorstResult Worst = new();
 
         // 与组合无关的结果
         public SlendernessResult Slenderness = new();      // 长细比
@@ -40,6 +43,90 @@
         public ShearResult ShearStrength = new();         // 抗剪
         public StabilityResult InPlaneStability = new();    // 平面内稳定
         public StabilityResult OutPlaneStability = new();    // 平面外稳定
+
+        
+        public void GetWorstResult()
+        {
+            Worst.MaxUtil = 0;
+            Worst.BestCombo = "";
+            Worst.CheckType = "";
+            Worst.BestStation = null;
+
+            // 1. 抗弯
+            foreach (var (combo, list) in FlexureStrength.Combos)
+            {
+                foreach (var s in list)
+                {
+                    if (s.Util > Worst.MaxUtil)
+                    {
+                        Worst.MaxUtil = s.Util;
+                        Worst.BestCombo = combo;
+                        Worst.CheckType = "压弯/拉弯";
+                        Worst.BestStation = s.Station;
+                    }
+                }
+            }
+
+            // 2. 抗剪
+            foreach (var (combo, list) in ShearStrength.Combos)
+            {
+                foreach (var s in list)
+                {
+                    if (s.Util > Worst.MaxUtil)
+                    {
+                        Worst.MaxUtil = s.Util;
+                        Worst.BestCombo = combo;
+                        Worst.CheckType = "抗剪";
+                        Worst.BestStation = s.Station;
+                    }
+                }
+            }
+
+            // 3. 平面内稳定
+            foreach (var (combo, util) in InPlaneStability.Combos)
+            {
+                if (util > Worst.MaxUtil)
+                {
+                    Worst.MaxUtil = util;
+                    Worst.BestCombo = combo;
+                    Worst.CheckType = "平面内稳定";
+                    Worst.BestStation = null;
+                }
+            }
+
+            // 4. 平面外稳定
+            foreach (var (combo, util) in OutPlaneStability.Combos)
+            {
+                if (util > Worst.MaxUtil)
+                {
+                    Worst.MaxUtil = util;
+                    Worst.BestCombo = combo;
+                    Worst.CheckType = "平面外稳定";
+                    Worst.BestStation = null;
+                }
+            }
+
+            // 5. 长细比（没有组合）
+            double slendMax = Math.Max(Slenderness.Util3, Slenderness.Util2);
+            if (slendMax > Worst.MaxUtil)
+            {
+                Worst.MaxUtil = slendMax;
+                Worst.BestCombo = "";
+                Worst.CheckType = "长细比";
+                Worst.BestStation = null;
+            }
+
+            // 6. 宽厚比（没有组合）
+            if (LocalStability.MaxUtil > Worst.MaxUtil)
+            {
+                Worst.MaxUtil = LocalStability.MaxUtil;
+                Worst.BestCombo = "";
+                Worst.CheckType = "局部稳定";
+                Worst.BestStation = null;
+            }
+
+        }
+
     }
 
     // ===== 梁的验算结果 =====
@@ -53,6 +140,9 @@
         public bool IsTapered;
         public SectionInfo SecBig = new();
         public SectionInfo SecSmall = new();
+        public WorstResult Worst = new();
+
+
 
         // 与组合无关的结果
         public SlendernessResult Slenderness = new();      // 长细比
@@ -62,6 +152,76 @@
         public FlexureResult FlexureStrength = new();      // 压弯/拉弯
         public ShearResult ShearStrength = new();         // 抗剪
         public StabilityResult LateralStability = new();    // 整体稳定
+        public void GetWorstResult()
+        {
+            Worst.MaxUtil = 0;
+            Worst.BestCombo = "";
+            Worst.CheckType = "";
+            Worst.BestStation = null;
+
+            // 1. 抗弯
+            foreach (var (combo, list) in FlexureStrength.Combos)
+            {
+                foreach (var s in list)
+                {
+                    if (s.Util > Worst.MaxUtil)
+                    {
+                        Worst.MaxUtil = s.Util;
+                        Worst.BestCombo = combo;
+                        Worst.CheckType = "压弯/拉弯";
+                        Worst.BestStation = s.Station;
+                    }
+                }
+            }
+
+            // 2. 抗剪
+            foreach (var (combo, list) in ShearStrength.Combos)
+            {
+                foreach (var s in list)
+                {
+                    if (s.Util > Worst.MaxUtil)
+                    {
+                        Worst.MaxUtil = s.Util;
+                        Worst.BestCombo = combo;
+                        Worst.CheckType = "抗剪";
+                        Worst.BestStation = s.Station;
+                    }
+                }
+            }
+
+            // 3. 平面内稳定
+            foreach (var (combo, util) in LateralStability.Combos)
+            {
+                if (util > Worst.MaxUtil)
+                {
+                    Worst.MaxUtil = util;
+                    Worst.BestCombo = combo;
+                    Worst.CheckType = "平面内稳定";
+                    Worst.BestStation = null;
+                }
+            }
+
+            // 5. 长细比（没有组合）
+            double slendMax = Math.Max(Slenderness.Util3, Slenderness.Util2);
+            if (slendMax > Worst.MaxUtil)
+            {
+                Worst.MaxUtil = slendMax;
+                Worst.BestCombo = "";
+                Worst.CheckType = "长细比";
+                Worst.BestStation = null;
+            }
+
+            // 6. 宽厚比（没有组合）
+            if (LocalStability.MaxUtil > Worst.MaxUtil)
+            {
+                Worst.MaxUtil = LocalStability.MaxUtil;
+                Worst.BestCombo = "";
+                Worst.CheckType = "局部稳定";
+                Worst.BestStation = null;
+            }
+
+        }
+
     }
 
 
@@ -133,8 +293,6 @@
     }
 
 
-
-
     //=====================稳定验算========================
     // 稳定验算结果（每个组合只有一个值）
     public class StabilityResult
@@ -160,6 +318,7 @@
         public double Lambda2;       // 2轴长细比
         public double Util3;          // 3轴利用率
         public double Util2;          // 2轴利用率
+        public double MaxUtil => Math.Max(Util3, Util2);
     }
 
     // =====================局部稳定（宽厚比）结果========================
@@ -171,7 +330,33 @@
         public double FlangeUtil_Top;     // 上翼缘宽厚比利用率
         public double FlangeUtil_Bot;     // 下翼缘宽厚比利用率
         public double WebUtil;        // 腹板高厚比利用率
+
+        public double MaxUtil
+        {
+            get
+            {
+                double flangeMax = Math.Max(FlangeUtil_Top, FlangeUtil_Bot);
+                return Math.Max(flangeMax, WebUtil);
+            }
+        }
     }
+
+    // =====================最不利结果========================
+    public class WorstResult
+    {
+        public double MaxUtil;           // 最大利用率
+        public string BestCombo = "";    // 最不利组合
+        public string CheckType = "";    // 最不利验算类型
+        public double? BestStation;      // 最不利测站（强度项才有）
+
+
+    }
+
+
+
+
+
+
 
 
 }

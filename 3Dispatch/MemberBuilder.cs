@@ -8,9 +8,9 @@ namespace PortalFrame._3Dispatch
     {
         private PreData _preData;
 
-        public MemberBuilder(PreData store)
+        public MemberBuilder(PreData preData)
         {
-            _preData = store;
+            _preData = preData;
         }
 
         // 串杆件-截面-材料
@@ -100,5 +100,26 @@ namespace PortalFrame._3Dispatch
         }
 
         private double Lerp(double a, double b, double t) => a + (b - a) * t;
+        
+        /// <summary>
+        /// 判断构件是柱还是梁
+        /// 与XY平面夹角大于45度是柱，小于45度是梁
+        /// </summary>
+        private MemberType GetMemberType(FrameData frame)
+        {
+            if (!_preData.Joints.TryGetValue(frame.StartJoint, out var j1)) return MemberType.Beam;
+            if (!_preData.Joints.TryGetValue(frame.EndJoint, out var j2)) return MemberType.Beam;
+
+            double dx = j2.X - j1.X;
+            double dy = j2.Y - j1.Y;
+            double dz = j2.Z - j1.Z;
+            double length = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+
+            if (length < 0.001) return MemberType.Beam;
+
+            double sinAngle = Math.Abs(dz) / length;
+            return sinAngle > 0.707 ? MemberType.Column : MemberType.Beam;
+        }
+
     }
 }

@@ -1,9 +1,5 @@
 ﻿namespace PortalFrame._5data
 {
-    public class CheckPara
-    {
-
-    }
     public class Preferences
     {
         // ===== 验算首选项 =====

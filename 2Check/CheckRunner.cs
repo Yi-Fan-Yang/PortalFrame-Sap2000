@@ -1,4 +1,5 @@
 ﻿using PortalFrame._1Model;
+using PortalFrame._5data;
 
 namespace PortalFrame._2Check
 {
@@ -7,7 +8,8 @@ namespace PortalFrame._2Check
         /// <summary>
         /// 柱的全部验算
         /// </summary>
-        public static ColumnCheckResult CheckColumn(MemberData member,Dictionary<string, List<ForceData>> forcesByCombo)
+        public static ColumnCheckResult CheckColumn(MemberData member,Dictionary<string, List<ForceData>> forcesByCombo
+                                                   ,Preferences prefs, OverWrites overwrites)
         {
             var result = new ColumnCheckResult();
 
@@ -43,13 +45,13 @@ namespace PortalFrame._2Check
                     var shearResult = new ShearStationResult();
 
                     // 1. 有效截面（填 flexResult.Ae/WeTop/WeBottom）
-                    SectionUtils.EffectiveSection(member, force, flexResult);
+                    SectionUtils.EffectiveSection(member, force, flexResult, prefs, overwrites);
 
                     // 2. 抗剪（填 shearResult.Vd/Util）
-                    StrengthCheck.ShearCheck(member, force, shearResult);
+                    StrengthCheck.ShearCheck(member, force, shearResult, prefs, overwrites);
 
                     // 3. 抗弯（填 flexResult.Util）
-                    StrengthCheck.FlexureCheck(member, force, shearResult, flexResult);
+                    StrengthCheck.FlexureCheck(member, force, shearResult, flexResult, prefs, overwrites);
 
                     flexList.Add(flexResult);
                     shearList.Add(shearResult);
@@ -57,6 +59,7 @@ namespace PortalFrame._2Check
                 result.FlexureStrength.Combos[comboName] = flexList;
                 result.ShearStrength.Combos[comboName] = shearList;
             }
+
             //====================长细比=======================
             CalcLength.SlendernessCheck(member, result.Slenderness);
 
@@ -66,21 +69,29 @@ namespace PortalFrame._2Check
             // ===== 平面内稳定 =====
             foreach (var (comboName, forces) in forcesByCombo)
             {
-                StabilityCheck_Column.ColumnInPlaneCheck(member, forces, result.Slenderness, result.InPlaneStability);
+                var stability = new StabilityResult();
+                stability.Combos[comboName] = 0;
+                StabilityCheck_Column.ColumnInPlaneCheck(member, forces, result.Slenderness, stability, prefs, overwrites);
+                result.InPlaneStability.Combos[comboName] = stability.Combos[comboName];
             }
 
             // ===== 平面外稳定=====
             foreach (var (comboName, forces) in forcesByCombo)
             {
-                StabilityCheck_Column.ColumnOutPlaneCheck(member, forces, result.InPlaneStability);
+                var stability = new StabilityResult();
+                stability.Combos[comboName] = 0;
+                StabilityCheck_Column.ColumnOutPlaneCheck(member, forces, result.Slenderness, stability, prefs, overwrites);
+                result.InPlaneStability.Combos[comboName] = stability.Combos[comboName];
             }
+            result.GetWorstResult();
             return result;
         }
 
         /// <summary>
         /// 梁的全部验算
         /// </summary>
-        public static BeamCheckResult CheckBeam(MemberData member,Dictionary<string, List<ForceData>> forcesByCombo)
+        public static BeamCheckResult CheckBeam(MemberData member,Dictionary<string, List<ForceData>> forcesByCombo
+                                               , Preferences prefs, OverWrites overwrites)
         {
             var result = new BeamCheckResult();
 

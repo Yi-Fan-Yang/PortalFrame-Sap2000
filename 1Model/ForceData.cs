@@ -8,7 +8,6 @@ namespace PortalFrame._1Model
 {
     public class ForceData
     {
-        public string Combo = "";
         public double Station;  // 距离 I 端的距离
         public double P;         // 轴力
         public double V2;        // 局部 2 向剪力

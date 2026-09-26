@@ -1,4 +1,5 @@
 ﻿using PortalFrame._1Model;
+using PortalFrame._5data;
 
 namespace PortalFrame._2Check
 {
@@ -7,10 +8,9 @@ namespace PortalFrame._2Check
     /// </summary>
     public static class StabilityCheck_Column
     {
-        public static void ColumnInPlaneCheck(MemberData member,List<ForceData> forces,SlendernessResult slenderness,StabilityResult result)
+        public static void ColumnInPlaneCheck(MemberData member,List<ForceData> forces,SlendernessResult slenderness,StabilityResult result
+                                                ,Preferences prefs, OverWrites overwrites)
         {
-            string combo = forces[0].Combo;
-
             // 1. 取大小端
             var (secBig, fBig, secSmall, fSmall) = GetEndData(member, forces);
 
@@ -56,12 +56,18 @@ namespace PortalFrame._2Check
                         + betaMx * M1 / ((1 - N1 / Ncr) * We1);
             util = Math.Abs(util) / f;
 
+            string combo = result.Combos.Keys.First();
             result.Combos[combo] = util;
         }
 
-        public static void ColumnOutPlaneCheck(MemberData member,List<ForceData> forces,StabilityResult result)
+        public static void ColumnOutPlaneCheck(MemberData member,List<ForceData> forces, SlendernessResult slenderness, StabilityResult result
+                                                , Preferences prefs, OverWrites overwrites)
         {
+            string combo = result.Combos.Keys.First();
 
+            // 后面填具体验算逻辑
+
+            //result.Combos[combo] = util;
         }
 
         // ===== φx 计算（b类截面）====="

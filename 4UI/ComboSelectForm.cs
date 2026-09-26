@@ -1,5 +1,4 @@
 ﻿using PortalFrame._5data;
-using static PortalFrame._5data.CheckPara;
 
 
 namespace PortalFrame._4UI

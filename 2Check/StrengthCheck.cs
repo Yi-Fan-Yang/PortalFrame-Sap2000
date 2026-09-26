@@ -1,5 +1,6 @@
 ﻿using CSiAPIv1;
 using PortalFrame._1Model;
+using PortalFrame._5data;
 
 namespace PortalFrame._2Check
 {
@@ -8,7 +9,8 @@ namespace PortalFrame._2Check
         /// <summary>
         /// 7.1.2 条 抗弯验算（每个测站都做）
         /// </summary>
-        public static void FlexureCheck(MemberData member, ForceData force,ShearStationResult VResult, FlexureStationResult flexResult)
+        public static void FlexureCheck(MemberData member, ForceData force,ShearStationResult VResult, FlexureStationResult flexResult
+                                        , Preferences prefs, OverWrites overwrites)
         {
             var sec = member.StationSections[force.Station];
 
@@ -65,7 +67,8 @@ namespace PortalFrame._2Check
         /// <summary>
         /// 7.1.1 条 抗剪验算（每个测站都做）
         /// </summary>
-        public static void ShearCheck(MemberData member, ForceData force, ShearStationResult result)
+        public static void ShearCheck(MemberData member, ForceData force, ShearStationResult result, 
+                                        Preferences prefs, OverWrites overwrites)
         {
             var sec = member.StationSections[force.Station];
             double hw1 = sec.H - sec.TopTf - sec.BotTf;

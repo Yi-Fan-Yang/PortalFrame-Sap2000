@@ -58,39 +58,94 @@ namespace PortalFrame._3Dispatch
         }
 
 
-        public void RunCheck()
+        public void RunCheck(HashSet<string>? selectedMembers = null)
         {
             _postData.ColumnResults.Clear();
             _postData.BeamResults.Clear();
 
-            foreach (var member in _preData.Members.Values)
+            // 如果没选，就算全部
+            IEnumerable<string> memberNames;
+            if (selectedMembers == null || selectedMembers.Count == 0)
             {
-                // 取内力
-                var forcesByCombo = GetMemberForces(member.Name);
+                memberNames = _preData.Members.Keys;
+            }
+            else
+            {
+                memberNames = selectedMembers;
+            }
+
+            foreach (var memberName in memberNames)
+            {
+                if (!_preData.Members.TryGetValue(memberName, out var member)) continue;
+
+                var forcesByCombo = GetMemberForces(memberName);
+                if (forcesByCombo.Count == 0) continue;
 
                 if (member.Type == MemberType.Column)
                 {
-                    var result = CheckRunner.CheckColumn(member, forcesByCombo);
-                    _postData.ColumnResults[member.Name] = result;
+                    var result = CheckRunner.CheckColumn(member, forcesByCombo, _prefer, _writes);
+                    _postData.ColumnResults[memberName] = result;
                 }
                 else
                 {
-                    var result = CheckRunner.CheckBeam(member, forcesByCombo);
-                    _postData.BeamResults[member.Name] = result;
+                    var result = CheckRunner.CheckBeam(member, forcesByCombo, _prefer, _writes);
+                    _postData.BeamResults[memberName] = result;
                 }
             }
         }
-
+        //获取对应组合的构件内力
         public Dictionary<string, List<ForceData>> GetMemberForces(string memberName)
         {
             var result = new Dictionary<string, List<ForceData>>();
 
             foreach (var comboName in _Combos.SelectedCombos)
             {
-                // 调 PostReader 取这个构件在这个组合下的所有测站内力
-                // 具体方法后面再细化，先占位
-                var forces = new List<ForceData>();
-                result[comboName] = forces;
+                if (_preData.Forces.ContainsKey(comboName) && _preData.Forces[comboName].ContainsKey(memberName))
+                {
+                    result[comboName] = _preData.Forces[comboName][memberName];
+                }
+            }
+            return result;
+        }
+        
+        /// <summary>
+        /// 根据验算类型，返回所有构件的利用率字典（用来画布着色）
+        /// </summary>
+        public Dictionary<string, double> GetMemberUtilsByCheckType(string checkType)
+        {
+            var result = new Dictionary<string, double>();
+
+            // 柱
+            foreach (var (name, col) in _postData.ColumnResults)
+            {
+                double util = checkType switch
+                {
+                    "汇总" => col.Worst.MaxUtil,
+                    "压弯/拉弯" => col.FlexureStrength.MaxUtil,
+                    "抗剪" => col.ShearStrength.MaxUtil,
+                    "平面内稳定" => col.InPlaneStability.MaxUtil,
+                    "平面外稳定" => col.OutPlaneStability.MaxUtil,
+                    "长细比" => col.Slenderness.MaxUtil,
+                    "局部稳定" => col.LocalStability.MaxUtil,
+                    _ => 0
+                };
+                result[name] = util;
+            }
+
+            // 梁
+            foreach (var (name, beam) in _postData.BeamResults)
+            {
+                double util = checkType switch
+                {
+                    "汇总" => beam.Worst.MaxUtil,
+                    "压弯/拉弯" => beam.FlexureStrength.MaxUtil,
+                    "抗剪" => beam.ShearStrength.MaxUtil,
+                    "整体稳定" => beam.LateralStability.MaxUtil,
+                    "长细比" => beam.Slenderness.MaxUtil,
+                    "局部稳定" => beam.LocalStability.MaxUtil,
+                    _ => 0
+                };
+                result[name] = util;
             }
 
             return result;
