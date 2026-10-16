@@ -15,9 +15,13 @@
 
 		<!-- SAP2000 v26 是 64 位，插件也必须 64 位 -->
 		<Platforms>x64</Platforms>
-		<OutputType>WinExe</OutputType>
-		<StartupObject>PortalFrame._4UI.Program</StartupObject>
+		<OutputType>Library</OutputType>
+		<StartupObject></StartupObject>
 	</PropertyGroup>
+
+	<ItemGroup>
+	  <PackageReference Include="DocX" Version="5.2.0" />
+	</ItemGroup>
 
 	<ItemGroup>
 		<!-- 引用你机器上的 SAP2000 API 库 -->

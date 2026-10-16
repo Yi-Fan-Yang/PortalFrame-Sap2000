@@ -1,30 +1,28 @@
-﻿using PortalFrame._1Model;
+﻿using CSiAPIv1;
+using PortalFrame._0Sap;
+using PortalFrame._1Model;
 using PortalFrame._5data;
 
 namespace PortalFrame._3Dispatch
 {
     // 数据预处理：把原始数据串成构件、插值变截面
-    public class MemberBuilder
+    public static class MemberBuilder
     {
-        private PreData _preData;
-
-        public MemberBuilder(PreData preData)
-        {
-            _preData = preData;
-        }
-
         // 串杆件-截面-材料
-        public void BuildMembers()
+        public static void BuildMembers()
         {
-            _preData.Members.Clear();
-            foreach (var kv in _preData.Frames)
+            Global.ModelData.Members.Clear();
+
+            foreach (var kv in Global.ModelData.Frames)
             {
                 string frameName = kv.Key;
-                string secName = _preData.FrameSectionMap[frameName];
-                if (!_preData.Sections.TryGetValue(secName, out var sec))continue;   // 非H型钢，跳过
-                if (!_preData.Materials.TryGetValue(sec.MatProp, out var mat))continue;   // 材料不是钢材，跳过
+                string secName = Global.ModelData.FrameSectionMap[frameName];
 
-                _preData.Members[frameName] = new MemberData
+                if (!Global.ModelData.Sections.TryGetValue(secName, out var sec)) continue;
+                if (!Global.ModelData.Materials.TryGetValue(sec.MatProp, out var mat)) continue;
+
+                // 1. 串杆件
+                var member = new MemberData
                 {
                     Name = frameName,
                     SectionName = secName,
@@ -32,32 +30,140 @@ namespace PortalFrame._3Dispatch
                     Section = sec,
                     Material = mat
                 };
+                SectionCal.GetMemberType(member);
+
+
+                // 2. 判断大小端
+                SectionCal.SetBigSmallEnd(member);
+
+                // 3. 算截面补充参数（大端、小端都算）
+                SectionCal.CalcSectionParams(member.SecBig);
+                SectionCal.CalcSectionParams(member.SecSmall);
+
+                // 4. 变截面插值
+                if (member.Section.IsTapered)
+                {
+                    SectionCal.InterpolateSection(member);
+                }
+
+                Global.ModelData.Members[frameName] = member;
             }
         }
-
         // 变截面杆件：插值各测站的截面属性
-        public void InterpolateStations()
+        // 变截面杆件：插值各测站的截面属性（插值）
+
+        // 算Kz + 写回 member.Kz
+        public static void GetKz(cSapModel sap, SelectedGroups groups)
         {
-            string firstCombo = _preData.Combos.First();
-            foreach (var member in _preData.Members.Values)
+            // ① 算Kz（填 _preData.Cols）
+            var kzCalc = new KzCalculator(sap);
+            kzCalc.Calc(groups.Names, Global.ModelData.Cols);
+
+            // ② 把 Kz 写回 member.Kz
+            foreach (var info in Global.ModelData.Cols)
             {
-                if (!member.Section.IsTapered) continue;
-
-                var tapered = (TaperedSectionData)member.Section;
-                double L = member.Frame.Length;
-                if (L == 0) continue;
-
-                var stations = _preData.Forces[firstCombo][member.Name];
-                foreach (var st in stations)
+                if (Global.ModelData.Members.TryGetValue(info.ColName, out var member))
                 {
-                    double ratio = st.Station / L;
-                    member.StationSections[st.Station] = InterpolateSection(tapered, ratio);
+                    member.Kz = info.Kz;
                 }
             }
         }
+    }
 
+    public static class SectionCal
+    {
+        // 判断大小端
+        public static void SetBigSmallEnd(MemberData member)
+        {
+            if (member.Section is TaperedSectionData tapered)
+            {
+                tapered.Start.Station = 0;
+                tapered.End.Station = member.Frame.Length;
+
+                if (tapered.End.H >= tapered.Start.H)
+                {
+                    member.SecBig = tapered.End;
+                    member.SecSmall = tapered.Start;
+                }
+                else
+                {
+                    member.SecBig = tapered.Start;
+                    member.SecSmall = tapered.End;
+                }
+            }
+            else
+            {
+                var hsec = (HSectionData)member.Section;
+                hsec.Station = 0;
+                member.SecBig = hsec;
+                member.SecSmall = hsec;
+            }
+        }
+
+        public static void CalcSectionParams(HSectionData sec)
+        {
+            // ===== 1. 上下翼缘中面距离 H0 =====
+            sec.H0 = sec.H - sec.TopTf / 2.0 - sec.BotTf / 2.0;
+
+            // ===== 2. 形心位置 Yc（从上边缘到形心的距离）=====
+            double AfTop = sec.TopB * sec.TopTf;
+            double AfBot = sec.BotB * sec.BotTf;
+            double Aw = sec.H0 * sec.Tw;
+            double A_total = AfTop + AfBot + Aw;
+
+            sec.Yt = (AfTop * sec.TopTf / 2.0
+                    + Aw * (sec.TopTf + sec.H0 / 2.0)
+                    + AfBot * (sec.H - sec.BotTf / 2.0)) / A_total;
+            sec.Yb = sec.H - sec.Yt;
+
+            // ===== 3. 上下翼缘对弱轴的惯性矩 =====
+            double I_top = sec.TopTf * Math.Pow(sec.TopB, 3) / 12.0;
+            double I_bot = sec.BotTf * Math.Pow(sec.BotB, 3) / 12.0;
+
+            // ===== 4. 翘曲惯性矩 Iw =====
+            if (Math.Abs(I_top + I_bot) > 1e-6)
+            {
+                sec.Iw = (I_top * I_bot / (I_top + I_bot)) * Math.Pow(sec.H0, 2);
+            }
+            else
+            {
+                sec.Iw = 0;
+            }
+
+            // ===== 5. 剪切中心到上下翼缘外缘距离 =====
+            if (Math.Abs(I_top + I_bot) > 1e-6)
+            {
+                sec.HToSc = (I_bot / (I_top + I_bot)) * sec.H0;
+                sec.HBoSc = (I_top / (I_top + I_bot)) * sec.H0;
+            }
+            else
+            {
+                sec.HToSc = sec.H0 / 2.0;
+                sec.HBoSc = sec.H0 / 2.0;
+            }
+        }
+
+        public static void InterpolateSection(MemberData member)
+        {
+            if (!member.Section.IsTapered) return;
+            if (member.AnalysisForces.Count == 0) return;
+
+            var tapered = (TaperedSectionData)member.Section;
+            double L = member.Frame.Length;
+            if (L == 0) return;
+
+            // 用第一个组合的测站
+            string firstCombo = member.AnalysisForces.Keys.First();
+            var stations = member.AnalysisForces[firstCombo];
+
+            foreach (var st in stations)
+            {
+                double ratio = st.Station / L;
+                member.StationSections[st.Station] = InterpolateOneSection(tapered, ratio);
+            }
+        }
         // 插值变截面
-        public HSectionData InterpolateSection(TaperedSectionData sec, double ratio)
+        private static HSectionData InterpolateOneSection(TaperedSectionData sec, double ratio)
         {
             int i33Order = sec.EI33Type;
             int i22Order = sec.EI22Type;
@@ -99,27 +205,34 @@ namespace PortalFrame._3Dispatch
             };
         }
 
-        private double Lerp(double a, double b, double t) => a + (b - a) * t;
-        
-        /// <summary>
-        /// 判断构件是柱还是梁
-        /// 与XY平面夹角大于45度是柱，小于45度是梁
-        /// </summary>
-        private MemberType GetMemberType(FrameData frame)
+        public static double Lerp(double a, double b, double t) => a + (b - a) * t;
+
+        // 判断构件是柱还是梁 与XY平面夹角大于45度是柱，小于45度是梁
+        public static void GetMemberType(MemberData member)
         {
-            if (!_preData.Joints.TryGetValue(frame.StartJoint, out var j1)) return MemberType.Beam;
-            if (!_preData.Joints.TryGetValue(frame.EndJoint, out var j2)) return MemberType.Beam;
+            var j1 = member.Frame.StartJoint;
+            var j2 = member.Frame.EndJoint;
 
             double dx = j2.X - j1.X;
             double dy = j2.Y - j1.Y;
             double dz = j2.Z - j1.Z;
-            double length = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+            double length = System.Math.Sqrt(dx * dx + dy * dy + dz * dz);
 
-            if (length < 0.001) return MemberType.Beam;
+            if (length < 0.001)
+            {
+                member.Type = MemberType.Beam;
+                return;
+            }
 
-            double sinAngle = Math.Abs(dz) / length;
-            return sinAngle > 0.707 ? MemberType.Column : MemberType.Beam;
+            double sinAngle = System.Math.Abs(dz) / length;
+            member.Type = sinAngle > 0.707 ? MemberType.Column : MemberType.Beam;
         }
+
 
     }
 }
+
+
+ 
+
+

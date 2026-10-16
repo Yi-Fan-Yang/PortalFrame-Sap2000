@@ -1,9 +1,7 @@
 ﻿using CSiAPIv1;
 using PortalFrame._0Sap;
 using PortalFrame._1Model;
-using PortalFrame._2Check;
 using PortalFrame._3Dispatch;
-using PortalFrame._5data;
 using System.Linq;
 using System.Text;
 
@@ -13,16 +11,7 @@ namespace PortalFrame._4UI
     public class MainForm : Form
     {
         private cPluginCallback _pluginCallback = null!;
-        private int _errorCode = 0;
-        private Dispatch _dispatch = null!;
-
-        private PreReader _pre = null!;
-        private PostReader _post = null!;
-        private PreData _preData = new();
-        private Preferences _prefer = new();
-        private OverWrites _Writes = new();
-        private DesignCombos _Combos = new();
-        private PostData _postData = new();
+        private CanvasInteraction _canvasInteraction = null!;
 
 
         private Button _btnReadModel = new Button();
@@ -38,15 +27,18 @@ namespace PortalFrame._4UI
         private ToolStripStatusLabel _lblStatus = new ToolStripStatusLabel();
 
 
-        private ModelRenderer _renderer = null!;
-        private CanvasInteraction _canvasInteraction = null!;
 
 
         public MainForm()
         {
+            this.Font = UiConfig.DefaultFont;
+            FormBorderStyle = FormBorderStyle.FixedSingle;   // 固定大小，不能拖拽
+            MaximizeBox = false;                              // 禁用最大化
+            MinimizeBox = false;                              // 禁用最小化
+
             Text = "门式刚架验算插件";
-            Width = 800;
-            Height = 700;
+            Width = 1600;
+            Height = 900;
             StartPosition = FormStartPosition.CenterScreen;
 
             LayoutControls();   // 第②步：摆位置
@@ -82,7 +74,7 @@ namespace PortalFrame._4UI
             // 画布
             _canvas.BackColor = Color.White;
             _canvas.Location = new Point(10, 50);
-            _canvas.Size = new Size(760, 480);
+            _canvas.Size = new Size(Width - 30, Height - 120);
             _canvas.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
 
             // 状态栏
@@ -96,6 +88,8 @@ namespace PortalFrame._4UI
             _statusStrip.Items.Add(new ToolStripStatusLabel("    "));
             _statusStrip.Items.Add(_lblSelected);
             _statusStrip.Items.Add(_lblStatus);
+            _statusStrip.Dock = DockStyle.Bottom;   // 状态栏固定在底部
+
 
             // 添加到窗体
             Controls.Add(_btnReadModel);
@@ -110,8 +104,6 @@ namespace PortalFrame._4UI
         private void SetupEvents()
         {
             _canvas.Paint += Canvas_Paint;
-            _canvasInteraction.MemberRightClicked += OnMemberRightClicked;
-
 
             _btnReadModel.Click += BtnReadModel_Click;
             _btnPreferences.Click += btnPreferences_Click;
@@ -125,34 +117,37 @@ namespace PortalFrame._4UI
         public void Connect(ref cSapModel sapModel, ref cPluginCallback pluginCallback)
         {
             _pluginCallback = pluginCallback;
-            _pre = new PreReader(ref sapModel);
-            _post = new PostReader(ref sapModel);
-            _dispatch = new Dispatch(_pre, _post, _preData,_prefer,_Writes,_Combos,_postData);
-            _renderer = new ModelRenderer();
+            Global.SapModel = sapModel;
             // 初始化画布交互
-            _canvasInteraction = new CanvasInteraction(_renderer, _canvas);
+            _canvasInteraction = new CanvasInteraction(Global.Renderer, _canvas);
+            _canvasInteraction.MemberRightClicked += OnMemberRightClicked;
             _canvasInteraction.SelectionChanged += UpdateStatusBar;
         }
         private void Canvas_Paint(object? sender, PaintEventArgs e)
         {
-            _renderer.Draw(e.Graphics, _canvas.ClientSize.Width, _canvas.ClientSize.Height);
+            Global.Renderer.Draw(e.Graphics, _canvas.ClientSize.Width, _canvas.ClientSize.Height);
         }
         private void BtnReadModel_Click(object? sender, EventArgs e)
         {
-            _dispatch.ReadAllData();           // ← 只调这一行，具体逻辑在 Dispatch 里
-
-            _renderer.SetData(_preData.Joints, _preData.Frames);
+            Dispatch.ReadAllData();
+            Persistence.LoadAll();
+            Global.Renderer.SetData(Global.ModelData.Joints, Global.ModelData.Frames);
             _canvas.Invalidate();
+
+            // 加这两行：统计柱和梁的总数
+            int totalCol = Global.ModelData.Members.Values.Count(m => m.Type == MemberType.Column);
+            int totalBeam = Global.ModelData.Members.Values.Count(m => m.Type == MemberType.Beam);
+            _lblTotal.Text = $"总计：柱 {totalCol} 根，梁 {totalBeam} 根";
 
             MessageBox.Show(
                 $"读取完成：\n" +
-                $"节点 {_preData.Joints.Count}，杆件 {_preData.Frames.Count}\n" +
-                $"截面 {_preData.Sections.Count}，材料 {_preData.Materials.Count}\n" +
-                $"组合 {_preData.Combos.Count}");
+                $"节点 {Global.ModelData.Joints.Count}，杆件 {Global.ModelData.Frames.Count}\n" +
+                $"截面 {Global.ModelData.Sections.Count}，材料 {Global.ModelData.Materials.Count}\n" +
+                $"组合 {Global.ModelData.AllCombos.Count}");
         }
         private void btnPreferences_Click(object? sender, EventArgs e)
         {
-            var form = new PreferencesForm(_prefer);
+            var form = new PreferencesForm(Global.ModelData.Preferences);
             if (form.ShowDialog() == DialogResult.OK)
             {
                 _lblStatus.Text = "首选项已更新";
@@ -160,52 +155,92 @@ namespace PortalFrame._4UI
         }
         private void btnOverwrite_Click(object? sender, EventArgs e)
         {
-            MessageBox.Show("覆盖项窗口（后面做）");
+            var selected = Global.Renderer.GetSelected();
+
+            if (selected.Count == 0)
+            {
+                MessageBox.Show("请先在画布上选中构件");
+                return;
+            }
+
+            // 把选中的构件都拿出来
+            var members = new List<MemberData>();
+            foreach (var name in selected)
+            {
+                if (Global.ModelData.Members.TryGetValue(name, out var member))
+                {
+                    members.Add(member);
+                }
+            }
+
+            if (members.Count == 0)
+            {
+                MessageBox.Show("找不到选中的构件");
+                return;
+            }
+
+            var form = new OverWritesForm(members);
+            form.ShowDialog();
         }
         private void btnCombo_Click(object? sender, EventArgs e)
         {
-            var form = new ComboSelectForm(_Combos, _preData.Combos);
+            var form = new ComboSelectForm(Global.Combos, Global.ModelData.AllCombos);
             if (form.ShowDialog() == DialogResult.OK)
             {
-                _lblStatus.Text = $"已选 {_Combos.SelectedCombos.Count} 个设计组合";
+                _lblStatus.Text = $"已选 {Global.Combos.SelectedCombos.Count} 个设计组合";
             }
         }
         private void BtnRunCheck_Click(object? sender, EventArgs e)
         {
-            _lblStatus.Text = "验算中...";
-            Application.DoEvents();
+            try
+            {
+                _lblStatus.Text = "验算中...";
+                Application.DoEvents();
+                //只验算选中的构件
+                var selected = Global.Renderer.GetSelected();
+                Dispatch.RunCheck(selected.Count > 0 ? selected : null);
+                // 把结果传给渲染器着色
+                var display = Dispatch.GetMemberDisplayInfo("汇总");
+                Global.Renderer.SetResults(display);
+                _canvas.Invalidate();
+                int colCount = Global.ModelData.Members.Values.Count(m => m.Type == MemberType.Column);
+                int beamCount = Global.ModelData.Members.Values.Count(m => m.Type == MemberType.Beam);
+                _lblStatus.Text = $"验算完成：柱 {colCount} 根，梁 {beamCount} 根";
 
-            //只验算选中的构件
-            var selected = _renderer.GetSelected();
-            _dispatch.RunCheck(selected.Count > 0 ? selected : null);
-
-            // 把结果传给渲染器着色
-            var utils = _dispatch.GetMemberUtilsByCheckType("汇总");
-            _renderer.SetResults(utils);
-            _canvas.Invalidate();
-            _lblStatus.Text = $"验算完成：柱 {_postData.ColumnResults.Count} 根，梁 {_postData.BeamResults.Count} 根";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("验算出错：" + ex.Message + "\n\n" + ex.StackTrace);
+            }
         }
         private void btnResult_Click(object? sender, EventArgs e)
         {
-            var form = new ResultSelectForm();
-            if (form.ShowDialog() == DialogResult.OK)
+            try
             {
-                var utils = _dispatch.GetMemberUtilsByCheckType(form.SelectedCheckType);
-                _renderer.SetResults(utils);
-                _canvas.Invalidate();
+                var form = new ResultSelectForm();
+                if (form.ShowDialog() == DialogResult.OK)
+                {
+                    var display = Dispatch.GetMemberDisplayInfo(form.SelectedCheckType);
+                    Global.Renderer.SetResults(display);
+                    _canvas.Invalidate();
 
-                _lblStatus.Text = $"显示结果：{form.SelectedCheckType}";
+                    _lblStatus.Text = $"显示结果：{form.SelectedCheckType}";
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("验算出错：" + ex.Message + "\n\n" + ex.StackTrace);
             }
         }
         private void UpdateStatusBar()
         {
-            var selected = _renderer.GetSelected();
+            var selected = Global.Renderer.GetSelected();
             int columnCount = 0;
             int beamCount = 0;
 
             foreach (var name in selected)
             {
-                if (_preData.Members.TryGetValue(name, out var member))
+                if (Global.ModelData.Members.TryGetValue(name, out var member))
                 {
                     if (member.Type == MemberType.Column) columnCount++;
                     else beamCount++;
@@ -214,28 +249,17 @@ namespace PortalFrame._4UI
 
             _lblSelected.Text = $"已选择：柱 {columnCount} 根，梁 {beamCount} 根";
         }
-
         private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
         {
-            _pluginCallback.Finish(_errorCode);
         }
 
         private void OnMemberRightClicked(string memberName)
         {
-            // 判断有没有这根构件的验算结果
-            if (_postData.ColumnResults.ContainsKey(memberName))
+            if (Global.ModelData.Members.TryGetValue(memberName, out var member))
             {
-                var form = new MemberDetailForm(memberName, _postData);
+                var form = new MemberDetailForm(member);
                 form.ShowDialog();
             }
-            else if (_postData.BeamResults.ContainsKey(memberName))
-            {
-                var form = new MemberDetailForm(memberName, _postData);
-                form.ShowDialog();
-            }
-            // 没结果的话什么都不做
         }
-
-
     }
 }

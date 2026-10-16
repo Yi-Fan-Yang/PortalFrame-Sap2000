@@ -9,8 +9,8 @@ namespace PortalFrame._1Model
     public class FrameData
     {
         public string Name = "";
-        public string StartJoint = "";
-        public string EndJoint = "";
+        public JointData StartJoint = null!;
+        public JointData EndJoint = null!;
         public double Length;   // 杆件长度
 
     }

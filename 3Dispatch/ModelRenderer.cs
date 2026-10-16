@@ -1,5 +1,7 @@
 ﻿using Microsoft.VisualBasic.Devices;
 using PortalFrame._1Model;
+using PortalFrame._4UI;
+using PortalFrame._5data;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -26,7 +28,10 @@ namespace PortalFrame._3Dispatch
         private Point _boxEnd;                               // 拉框终点
 
         // 验算结果：杆件名→最大利用率
-        private Dictionary<string, double> _currentUtils = new();
+        private Dictionary<string, MemberDisplayInfo> _currentDisplay = new();
+        public int GetJointsCount() => _joints.Count;
+        public int GetFramesCount() => _frames.Count;
+
 
 
         /// <summary>
@@ -42,6 +47,10 @@ namespace PortalFrame._3Dispatch
         }
         public void Draw(Graphics g, int canvasWidth, int canvasHeight)
         {
+            // 开启抗锯齿
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
+
             if (_joints.Count == 0) return;
 
             CalcProjection(canvasWidth, canvasHeight);   // 1. 算投影参数
@@ -55,10 +64,10 @@ namespace PortalFrame._3Dispatch
             if (_selectedMembers.Contains(memberName))
                 return _pens.Selected;
 
-            if (_currentUtils.TryGetValue(memberName, out double util))
+            if (_currentDisplay.TryGetValue(memberName, out var info))
             {
-                if (util <= 0.8) return _pens.Green;
-                if (util <= 1.0) return _pens.Yellow;
+                if (info.Util <= 0.8) return _pens.Green;
+                if (info.Util <= 1.0) return _pens.Yellow;
                 return _pens.Red;
             }
 
@@ -67,19 +76,20 @@ namespace PortalFrame._3Dispatch
         // 坐标变换：模型坐标 → 屏幕坐标
         private PointF ToScreen(JointData j)
         {
-            // ① 先绕 Y 轴左右转（方位角）
-            double x1 = j.X * Math.Cos(_proj.AngleY) + j.Z * Math.Sin(_proj.AngleY);
-            double z1 = -j.X * Math.Sin(_proj.AngleY) + j.Z * Math.Cos(_proj.AngleY);
+            // ① 先绕 Z 轴左右转（方位角，左右拖鼠标的时候）
+            double x1 = j.X * Math.Cos(_proj.AngleY) - j.Y * Math.Sin(_proj.AngleY);
+            double y1 = j.X * Math.Sin(_proj.AngleY) + j.Y * Math.Cos(_proj.AngleY);
 
-            // ② 再绕 X 轴上下转（俯仰角）
-            double y2 = j.Y * Math.Cos(_proj.AngleX) - z1 * Math.Sin(_proj.AngleX);
+            // ② 再绕 X 轴上下转（俯仰角，上下拖鼠标的时候）
+            double z2 = j.Z * Math.Cos(_proj.AngleX) - y1 * Math.Sin(_proj.AngleX);
 
-            // ③ 投影到屏幕
+            // ③ 投影到屏幕：水平是x1，竖直是z2（Z是竖直方向）
             float sx = (float)(_proj.Pad + (x1 - _proj.MinX) * _proj.S + _proj.PanX);
-            float sy = (float)(_proj.CanvasHeight - _proj.Pad - (y2 - _proj.MinZ) * _proj.S + _proj.PanY);
+            float sy = (float)(_proj.CanvasHeight - _proj.Pad - (z2 - _proj.MinZ) * _proj.S + _proj.PanY);
 
             return new PointF(sx, sy);
         }
+
         // 算投影参数
         private void CalcProjection(int canvasWidth, int canvasHeight)
         {
@@ -105,14 +115,20 @@ namespace PortalFrame._3Dispatch
 
             foreach (var f in _frames.Values)
             {
-                if (!_joints.TryGetValue(f.StartJoint, out var j1)) continue;
-                if (!_joints.TryGetValue(f.EndJoint, out var j2)) continue;
-
+                var j1 = f.StartJoint;
+                var j2 = f.EndJoint;
                 var p1 = ToScreen(j1);
                 var p2 = ToScreen(j2);
                 _memberScreenCoords[f.Name] = (p1, p2);
 
                 g.DrawLine(GetMemberPen(f.Name), p1, p2);
+
+                // 写利用率数值（杆件中间靠上的位置）
+                if (_currentDisplay.TryGetValue(f.Name, out var info))
+                {
+                    PointF mid = new PointF((p1.X + p2.X) / 2, (p1.Y + p2.Y) / 2 - 10);
+                    g.DrawString(info.Text, UiConfig.DefaultFont, GetMemberBrush(f.Name), mid);
+                }
             }
         }
         // 画节点
@@ -125,6 +141,21 @@ namespace PortalFrame._3Dispatch
                 g.FillEllipse(brush, p.X - 3, p.Y - 3, 6, 6);
             }
         }
+        private Brush GetMemberBrush(string memberName)
+        {
+            if (_selectedMembers.Contains(memberName))
+                return Brushes.Blue;
+
+            if (_currentDisplay.TryGetValue(memberName, out var info))
+            {
+                if (info.Util <= 0.8) return Brushes.Green;
+                if (info.Util <= 1.0) return Brushes.Yellow;
+                return Brushes.Red;
+            }
+
+            return Brushes.Black;
+        }
+
 
 
 
@@ -162,9 +193,8 @@ namespace PortalFrame._3Dispatch
         }
         public void Rotate(double dx, double dy)
         {
-            // 每 100 像素转 1 弧度（手感可以调）
-            _proj.AngleY += dx / 100.0;   // 左右拖 → 方位角
-            _proj.AngleX += dy / 100.0;   // 上下拖 → 俯仰角
+            _proj.AngleY += dx / 100.0;
+            _proj.AngleX += dy / 100.0;
         }
         public void Zoom(double delta, double mouseX, double mouseY)
         {
@@ -336,12 +366,9 @@ namespace PortalFrame._3Dispatch
         /// <summary>
         /// =============================结果显示=========================
         /// </summary>
-        public void SetResults(Dictionary<string, double> utils)
+        public void SetResults(Dictionary<string, MemberDisplayInfo> display)
         {
-            _currentUtils = utils;
+            _currentDisplay = display;
         }
-
-
-
     }
 }

@@ -1,67 +1,52 @@
 ﻿using CSiAPIv1;
 using PortalFrame._1Model;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace PortalFrame._0Sap
 {
-    public class PreReader
+    public static class PreReader
     {
-        private cSapModel _sapModel;
-
-        // 构造时把 SAP 模型交进来
-        public PreReader(ref cSapModel sapModel)
-        {
-            _sapModel = sapModel;
-        }
-
 
        // =================Geometry=======================
         // 读所有节点：名字 + 坐标
-        public Dictionary<string, JointData> GetAllJoints()
+        public static Dictionary<string, JointData> GetAllJoints()
         {
             int count = 0;
             string[] names = null!;
-            _sapModel.PointObj.GetNameList(ref count, ref names);
+            Global.SapModel.PointObj.GetNameList(ref count, ref names);
 
             var result = new Dictionary<string, JointData>();
             foreach (string name in names)
             {
                 double x = 0, y = 0, z = 0;
                 // 问 SAP：这个节点的坐标是多少
-                _sapModel.PointObj.GetCoordCartesian(name, ref x, ref y, ref z);
+                Global.SapModel.PointObj.GetCoordCartesian(name, ref x, ref y, ref z);
                 result[name] = new JointData { Name = name, X = x, Y = y, Z = z };
             }
             return result;
         }
 
         // 读所有杆件：名字 + 两端节点
-        public Dictionary<string,FrameData> GetAllFrames()
+        public static Dictionary<string,FrameData> GetAllFrames(Dictionary<string, JointData> joints)
         {
             int count = 0;
             string[] names = null!;
-            _sapModel.FrameObj.GetNameList(ref count, ref names);
+            Global.SapModel.FrameObj.GetNameList(ref count, ref names);
 
             var result = new Dictionary<string, FrameData>();
             foreach (string name in names)
             {
                 string p1 = "", p2 = "";
                 // 问 SAP：这根杆件的两端是哪两个节点
-                _sapModel.FrameObj.GetPoints(name, ref p1, ref p2);
+                Global.SapModel.FrameObj.GetPoints(name, ref p1, ref p2);
                 // 读两端坐标算长度
-                double x1 = 0, y1 = 0, z1 = 0;
-                double x2 = 0, y2 = 0, z2 = 0;
-                _sapModel.PointObj.GetCoordCartesian(p1, ref x1, ref y1, ref z1);
-                _sapModel.PointObj.GetCoordCartesian(p2, ref x2, ref y2, ref z2);
+                double x1 = joints[p1].X, y1 = joints[p1].Y, z1 = joints[p1].Z;
+                double x2 = joints[p2].X, y2 = joints[p2].Y, z2 = joints[p2].Z;
                 double len = Math.Sqrt(
                     (x2 - x1) * (x2 - x1) +
                     (y2 - y1) * (y2 - y1) +
                     (z2 - z1) * (z2 - z1));
 
-                result[name] = new FrameData { Name = name, StartJoint = p1, EndJoint = p2, Length = len };
+                result[name] = new FrameData { Name = name, StartJoint = joints[p1], EndJoint = joints[p2], Length = len };
             }
             return result;
         }
@@ -72,12 +57,12 @@ namespace PortalFrame._0Sap
         //===================Property=====================
 
         // 读所有钢材材料（自动过滤混凝土、铝等非钢材）
-        public Dictionary<string, MaterialData> GetAllMaterials()
+        public static Dictionary<string, MaterialData> GetAllMaterials()
         {
             var result = new Dictionary<string, MaterialData>();
             int n = 0;
             string[] names = null!;
-            _sapModel.PropMaterial.GetNameList(ref n, ref names);
+            Global.SapModel.PropMaterial.GetNameList(ref n, ref names);
 
             for (int i = 0; i < n; i++)
             {
@@ -85,7 +70,7 @@ namespace PortalFrame._0Sap
                 eMatType matType = 0;
                 int color = 0;
                 string notes = "", guid = "";
-                int ret = _sapModel.PropMaterial.GetMaterial(
+                int ret = Global.SapModel.PropMaterial.GetMaterial(
                     names[i], ref matType, ref color, ref notes, ref guid);
 
                 // 只留钢材（eMatType_Steel = 1）
@@ -99,12 +84,12 @@ namespace PortalFrame._0Sap
         }
 
         //读取Frame截面定义表，
-        public Dictionary<string, SectionBase> GetAllSections()
+        public static Dictionary<string, SectionBase> GetAllSections()
         {
             var result = new Dictionary<string, SectionBase>();
             int n = 0;
             string[] names = null!;
-            _sapModel.PropFrame.GetNameList(ref n, ref names);
+            Global.SapModel.PropFrame.GetNameList(ref n, ref names);
 
             for (int i = 0; i < n; i++)
             {
@@ -122,17 +107,17 @@ namespace PortalFrame._0Sap
         }
 
         // 读所有杆件的截面名映射，字典 {杆件名 → 截面名}
-        public Dictionary<string, string> GetFrameSectionMap()
+        public static Dictionary<string, string> GetFrameSectionMap()
         {
             var result = new Dictionary<string, string>();
             int n = 0;
             string[] names = null!;
-            _sapModel.FrameObj.GetNameList(ref n, ref names);
+            Global.SapModel.FrameObj.GetNameList(ref n, ref names);
             for (int i = 0; i < n; i++)
             {
                 string section = "";
                 string sAuto = "";
-                _sapModel.FrameObj.GetSection(names[i], ref section,ref sAuto);
+                Global.SapModel.FrameObj.GetSection(names[i], ref section,ref sAuto);
                 result[names[i]] = section;
             }
             return result;
@@ -143,7 +128,7 @@ namespace PortalFrame._0Sap
 
         //==================Private======================
         // 读截面的完整数据,返回基类（等截面→HSectionData，变截面→TaperedSectionData）
-        private SectionBase? GetSectionData(string sectionName)
+        private static SectionBase? GetSectionData(string sectionName)
         {
             int n = 0;
             string[] startSec = null!, endSec = null!;
@@ -152,7 +137,7 @@ namespace PortalFrame._0Sap
             int color = 0;
             string notes = "", guid = "";
 
-            int ret = _sapModel.PropFrame.GetNonPrismatic(
+            int ret = Global.SapModel.PropFrame.GetNonPrismatic(
                 sectionName, ref n, ref startSec, ref endSec,
                 ref myLength, ref myType, ref ei33, ref ei22,
                 ref color, ref notes, ref guid);
@@ -185,14 +170,14 @@ namespace PortalFrame._0Sap
             }
         }
         // 读单个 H 形截面
-        private HSectionData? ReadHSection(string name)
+        private static HSectionData? ReadHSection(string name)
         {
             string fileName = "", matProp = "";
             double h = 0, topB = 0, topTf = 0, tw = 0, botB = 0, botTf = 0, fillet = 0;
             int color = 0;
             string notes = "", guid = "";
 
-            int ret1 = _sapModel.PropFrame.GetISection_1(
+            int ret1 = Global.SapModel.PropFrame.GetISection_1(
                 name,
                 ref fileName, ref matProp,
                 ref h, ref topB, ref topTf, ref tw,
@@ -202,7 +187,7 @@ namespace PortalFrame._0Sap
 
             double A = 0, as2 = 0, as3 = 0, J = 0, i22 = 0, i33 = 0;
             double s22 = 0, s33 = 0, z22 = 0, z33 = 0, r22 = 0, r33 = 0;
-            _sapModel.PropFrame.GetSectProps(
+            Global.SapModel.PropFrame.GetSectProps(
                 name,
                 ref A, ref as2, ref as3, ref J,
                 ref i22, ref i33, ref s22, ref s33,
@@ -219,7 +204,7 @@ namespace PortalFrame._0Sap
                        + A2 * (topTf + hw + botTf / 2))
                        / A;
 
-            return new HSectionData
+            var sec = new HSectionData
             {
                 MatProp = matProp,
                 H = h,
@@ -243,9 +228,10 @@ namespace PortalFrame._0Sap
                 R22 = r22,
                 R33 = r33
             };
+            return sec;
         }
         // 读钢材材料属性
-        private MaterialData GetMaterialSteel(string materialName)
+        private static MaterialData GetMaterialSteel(string materialName)
         {
             var mat = new MaterialData { Name = materialName };
 
@@ -261,6 +247,21 @@ namespace PortalFrame._0Sap
             return mat;
         }
 
+        // 模型是否锁定（=已分析）
+        public static bool IsModelLocked()
+        {
+            bool locked;
+            return locked= Global.SapModel.GetModelIsLocked();
+        }
+
+        // 获取模型里所有 group 名
+        public static List<string> GetGroupList()
+        {
+            int count = 0;
+            string[] names = null!;
+            Global.SapModel.GroupDef.GetNameList(ref count, ref names);
+            return names?.ToList() ?? new List<string>();
+        }
 
 
 

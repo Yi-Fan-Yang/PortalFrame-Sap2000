@@ -3,24 +3,29 @@
     public class ResultSelectForm : Form
     {
         // 验算类型选项
-        private RadioButton _rbSummary = null!;
-        private RadioButton _rbFlexure = null!;
-        private RadioButton _rbShear = null!;
-        private RadioButton _rbInPlane = null!;
-        private RadioButton _rbOutPlane = null!;
-        private RadioButton _rbSlenderness = null!;
-        private RadioButton _rbLocalStab = null!;
+        private RadioButton _rbSummary = new RadioButton();
+        private RadioButton _rbFlexure = new RadioButton();
+        private RadioButton _rbShear = new RadioButton();
+        private RadioButton _rbInPlane = new RadioButton();
+        private RadioButton _rbOutPlane = new RadioButton();
+        private RadioButton _rbSlenderness = new RadioButton();
+        private RadioButton _rbLocalStab = new RadioButton();
 
-        private Button _btnOk = null!;
-        private Button _btnCancel = null!;
+        private Button _btnOk = new Button();
+        private Button _btnCancel = new Button();
 
         public string SelectedCheckType { get; private set; } = "汇总";
 
         public ResultSelectForm()
         {
+            this.Font = UiConfig.DefaultFont;
+            FormBorderStyle = FormBorderStyle.FixedSingle;   // 固定大小，不能拖拽
+            MaximizeBox = false;                              // 禁用最大化
+            MinimizeBox = false;                              // 禁用最小化
+
             Text = "选择验算结果";
-            Width = 250;
-            Height = 300;
+            Width = 350;
+            Height = 480;
             StartPosition = FormStartPosition.CenterParent;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
@@ -32,52 +37,53 @@
 
         private void LayoutControls()
         {
-            int y = 20;
+            int y = 30;
 
             _rbSummary.Text = "汇总";
-            _rbSummary.Location = new Point(20, y);
+            _rbSummary.Location = new Point(30, y);
             _rbSummary.Checked = true;
-            y += 30;
+            y += 45;
 
             _rbFlexure.Text = "压弯/拉弯";
-            _rbFlexure.Location = new Point(20, y);
-            y += 30;
+            _rbFlexure.Location = new Point(30, y);
+            y += 45;
 
             _rbShear.Text = "抗剪";
-            _rbShear.Location = new Point(20, y);
-            y += 30;
+            _rbShear.Location = new Point(30, y);
+            y += 45;
 
             _rbInPlane.Text = "平面内稳定";
-            _rbInPlane.Location = new Point(20, y);
-            y += 30;
+            _rbInPlane.Location = new Point(30, y);
+            y += 45;
 
             _rbOutPlane.Text = "平面外稳定";
-            _rbOutPlane.Location = new Point(20, y);
-            y += 30;
+            _rbOutPlane.Location = new Point(30, y);
+            y += 45;
 
             _rbSlenderness.Text = "长细比";
-            _rbSlenderness.Location = new Point(20, y);
-            y += 30;
+            _rbSlenderness.Location = new Point(30, y);
+            y += 45;
 
             _rbLocalStab.Text = "局部稳定";
-            _rbLocalStab.Location = new Point(20, y);
-            y += 40;
+            _rbLocalStab.Location = new Point(30, y);
+            y += 50;
 
             _btnOk.Text = "确定";
-            _btnOk.Size = new Size(75, 25);
-            _btnOk.Location = new Point(30, y);
+            _btnOk.Size = new Size(100, 35);
+            _btnOk.Location = new Point(50, y);
 
             _btnCancel.Text = "取消";
-            _btnCancel.Size = new Size(75, 25);
-            _btnCancel.Location = new Point(130, y);
+            _btnCancel.Size = new Size(100, 35);
+            _btnCancel.Location = new Point(180, y);
 
             Controls.AddRange(new Control[]
             {
-                _rbSummary, _rbFlexure, _rbShear, _rbInPlane, _rbOutPlane,
-                _rbSlenderness, _rbLocalStab,
-                _btnOk, _btnCancel
+        _rbSummary, _rbFlexure, _rbShear, _rbInPlane, _rbOutPlane,
+        _rbSlenderness, _rbLocalStab,
+        _btnOk, _btnCancel
             });
         }
+
 
         private void SetupEvents()
         {

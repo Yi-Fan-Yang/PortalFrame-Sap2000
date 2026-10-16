@@ -20,6 +20,8 @@ namespace PortalFrame._4UI
         private enum DragMode { None, Rotate, Pan }
         private DragMode _dragMode = DragMode.None;
         private Point _lastMousePos;
+        // 旋转中心的屏幕坐标
+        private Point _rotateCenter;
 
         // 选择模式
         private enum SelectMode { None, Pick, Box }
@@ -48,6 +50,7 @@ namespace PortalFrame._4UI
             if (e.Button == MouseButtons.Middle)
             {
                 _lastMousePos = e.Location;
+                _rotateCenter = e.Location;   // 记录旋转中心是鼠标按下的位置
                 if ((Control.ModifierKeys & Keys.Shift) != 0) _dragMode = DragMode.Rotate;
                 else _dragMode = DragMode.Pan;
             }
@@ -94,13 +97,13 @@ namespace PortalFrame._4UI
         }
         private void Canvas_MouseUp(object? sender, MouseEventArgs e)
         {
+            // 中键松开
             if (e.Button == MouseButtons.Middle)
             {
                 _dragMode = DragMode.None;
                 return;
             }
-
-            if (e.Button != MouseButtons.Left) return;
+            // 右键点构件
             if (e.Button == MouseButtons.Right)
             {
                 var member = _renderer.HitTest(e.Location);
@@ -110,7 +113,8 @@ namespace PortalFrame._4UI
                 }
                 return;
             }
-
+            // 左键松开
+            if (e.Button != MouseButtons.Left) return;
 
             if (_selectMode == SelectMode.Pick)
                 DoPickSelect(e.Location);
@@ -134,7 +138,11 @@ namespace PortalFrame._4UI
 
             if (member == null)
             {
-                if (!ctrl) _renderer.ClearSelection();
+                if (!ctrl)
+                {
+                    _renderer.ClearSelection();
+                    SelectionChanged?.Invoke();
+                } 
                 return;
             }
 

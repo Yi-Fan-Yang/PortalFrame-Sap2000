@@ -1,10 +1,15 @@
-﻿using PortalFrame._2Check;
+﻿using PortalFrame._0Sap;
+using PortalFrame._1Model;
+using PortalFrame._2Check;
+using PortalFrame._2CheckResults;
+using PortalFrame._3Dispatch;
 using PortalFrame._5data;
 
 namespace PortalFrame._4UI
 {
     public class MemberDetailForm : Form
     {
+        private MemberData _member = null!;
         private string _memberName;
         private ColumnCheckResult? _colResult;
         private BeamCheckResult? _beamResult;
@@ -12,7 +17,7 @@ namespace PortalFrame._4UI
 
         // 左栏
         private GroupBox _grpCheckType = new() { Text = "验算类型" };
-        private ListBox _lstCheckType = new();
+        private ListView _lstCheckType = new();
 
         private GroupBox _grpStation = new() { Text = "测站" };
         private ListView _lstStation = new();
@@ -31,112 +36,118 @@ namespace PortalFrame._4UI
 
         // 按钮
         private Button _btnDetail = new() { Text = "显示详细文件" };
+        private Button _btnReport = new() { Text = "生成计算书" };
         private Button _btnBack = new() { Text = "返回" };
 
-        public MemberDetailForm(string memberName, PostData postData)
+        public MemberDetailForm(MemberData member)
         {
+            this.Font = UiConfig.DefaultFont;
+            FormBorderStyle = FormBorderStyle.FixedSingle;   // 固定大小，不能拖拽
+            MaximizeBox = false;                              // 禁用最大化
+            MinimizeBox = false;                              // 禁用最小化
+
             Text = "构件验算详情";
-            Width = 900;
-            Height = 600;
+            Width = 1330;
+            Height = 800;
             StartPosition = FormStartPosition.CenterScreen;
 
             SetupLayout();
             SetupEvents();
+            
+            _member = member;
+            _memberName = member.Name;
 
-            Text = $"构件验算详情 - {memberName}";
-            Width = 900;
-            Height = 600;
-            StartPosition = FormStartPosition.CenterScreen;
-
-            _memberName = memberName;
-
-            // 从 PostData 里拿这根构件的结果
-            if (postData.ColumnResults.TryGetValue(memberName, out var col))
-            {
+            if (member.CheckResult is ColumnCheckResult col)
                 _colResult = col;
-            }
-            else if (postData.BeamResults.TryGetValue(memberName, out var beam))
-            {
+            else if (member.CheckResult is BeamCheckResult beam)
                 _beamResult = beam;
-            }
 
-            SetupLayout();
-            SetupEvents();
             FillStaticData();   // 填右栏静态数据
             FillCheckTypeList(); // 填左栏验算类型
             SelectWorstResult();
+            UpdateBtnDetailEnabled();
         }
 
         private void SetupLayout()
         {
             // 左栏上：验算类型
             _grpCheckType.Location = new Point(10, 10);
-            _grpCheckType.Size = new Size(200, 200);
+            _grpCheckType.Size = new Size(250, 300);
             _lstCheckType.Dock = DockStyle.Fill;
+            _lstCheckType.View = View.List;
+            _lstCheckType.FullRowSelect = true;
             _grpCheckType.Controls.Add(_lstCheckType);
 
             // 左栏下：测站
-            _grpStation.Location = new Point(10, 220);
-            _grpStation.Size = new Size(200, 300);
+            _grpStation.Location = new Point(10, 320);
+            _grpStation.Size = new Size(250, 420);
             _lstStation.Dock = DockStyle.Fill;
             _lstStation.View = View.Details;
             _lstStation.FullRowSelect = true;
-            _lstStation.Columns.Add("测站", 80);
-            _lstStation.Columns.Add("利用率", 80);
+            _lstStation.Columns.Add("测站", 100);
+            _lstStation.Columns.Add("利用率", 100);
             _grpStation.Controls.Add(_lstStation);
 
             // 中栏：组合
-            _grpCombo.Location = new Point(220, 10);
-            _grpCombo.Size = new Size(350, 510);
+            _grpCombo.Location = new Point(270, 10);
+            _grpCombo.Size = new Size(450, 730);
             _lstCombo.Dock = DockStyle.Fill;
             _lstCombo.View = View.Details;
             _lstCombo.FullRowSelect = true;
-            _lstCombo.Columns.Add("组合名", 250);
-            _lstCombo.Columns.Add("利用率", 80);
+            _lstCombo.Columns.Add("组合名", 300);
+            _lstCombo.Columns.Add("利用率", 100);
             _grpCombo.Controls.Add(_lstCombo);
 
             // 右栏：静态结果
             // 右栏：三个 GroupBox
             // 1. 截面属性
-            _grpSec.Location = new Point(580, 10);
-            _grpSec.Size = new Size(250, 250);
+            _grpSec.Location = new Point(740, 10);
+            _grpSec.Size = new Size(560, 350);
             _lstSec.Dock= DockStyle.Fill;
             _lstSec.View = View.Details;
             _lstSec.FullRowSelect = true;
-            _lstSec.Columns.Add("项目", 90);
-            _lstSec.Columns.Add("小端", 80);
-            _lstSec.Columns.Add("项目", 90);
-            _lstSec.Columns.Add("大端", 80);
+            _lstSec.Columns.Add("项目", 120);
+            _lstSec.Columns.Add("小端", 160);   
+            _lstSec.Columns.Add("项目", 120);
+            _lstSec.Columns.Add("大端", 160);   
             _grpSec.Controls.Add(_lstSec);
 
 
             // 2. 长细比
-            _grpSlend.Location = new Point(580, 270);
-            _grpSlend.Size = new Size(250, 100);
+            _grpSlend.Location = new Point(740, 370);
+            _grpSlend.Size = new Size(560, 120);
             _lstSlend.Dock = DockStyle.Fill;
             _lstSlend.View = View.Details;
             _lstSlend.FullRowSelect = true;
-            _lstSlend.Columns.Add("项目", 90);
-            _lstSlend.Columns.Add("数值", 60);
-            _lstSlend.Columns.Add("项目", 90);
-            _lstSlend.Columns.Add("数值", 60);
+            _lstSlend.Columns.Add("项目", 150);
+            _lstSlend.Columns.Add("数值", 80);
+            _lstSlend.Columns.Add("项目", 80);
+            _lstSlend.Columns.Add("利用率", 80);
             _grpSlend.Controls.Add(_lstSlend);
 
             // 3. 局部稳定（宽厚比）
-            _grpLocal.Location = new Point(580, 380);
-            _grpLocal.Size = new Size(250, 100);
+            _grpLocal.Location = new Point(740, 500);
+            _grpLocal.Size = new Size(560, 160);
             _lstLocal.Dock = DockStyle.Fill;
             _lstLocal.View = View.Details;
             _lstLocal.FullRowSelect = true;
-            _lstLocal.Columns.Add("项目", 90);
-            _lstLocal.Columns.Add("数值", 60);
-            _lstLocal.Columns.Add("项目", 90);
-            _lstLocal.Columns.Add("数值", 60);
+            _lstLocal.Columns.Add("项目", 150);
+            _lstLocal.Columns.Add("数值", 80);
+            _lstLocal.Columns.Add("项目", 80);
+            _lstLocal.Columns.Add("利用率", 80);
             _grpLocal.Controls.Add(_lstLocal);
 
-            // 按钮
-            _btnDetail.Location = new Point(600, 490);
-            _btnBack.Location = new Point(720, 490);
+            // 左边两个按钮上下排
+            _btnDetail.Size = new Size(140, 35);
+            _btnDetail.Location = new Point(900, 640);
+
+            _btnReport.Size = new Size(140, 35);
+            _btnReport.Location = new Point(900, 685);
+
+            // 右边返回按钮垂直居中
+            _btnBack.Size = new Size(120, 40);
+            _btnBack.Location = new Point(1100, 662);
+
 
             Controls.Add(_grpCheckType);
             Controls.Add(_grpStation);
@@ -145,42 +156,103 @@ namespace PortalFrame._4UI
             Controls.Add(_grpSlend);
             Controls.Add(_grpLocal);
             Controls.Add(_btnDetail);
+            Controls.Add(_btnReport);
             Controls.Add(_btnBack);
         }
-
         private void SetupEvents()
         {
-            // 选验算类型 → 更新中栏组合列表
-            _lstCheckType.SelectedIndexChanged += LstCheckType_SelectedIndexChanged;
+            _lstCheckType.SelectedIndexChanged += (s, e) =>
+            {
+                LstCheckType_SelectedIndexChanged(s, e);
+                UpdateBtnDetailEnabled();
+            };
 
-            // 选中组合 → 更新左栏测站列表
-            _lstCombo.SelectedIndexChanged += LstCombo_SelectedIndexChanged;
+            _lstCombo.SelectedIndexChanged += (s, e) =>
+            {
+                LstCombo_SelectedIndexChanged(s, e);
+                UpdateBtnDetailEnabled();
+            };
 
-            // 返回按钮
+            _lstStation.SelectedIndexChanged += (s, e) => UpdateBtnDetailEnabled();
+
+            _btnDetail.Click += BtnDetail_Click;
+            _btnReport.Click += BtnReport_Click;
             _btnBack.Click += (s, e) => Close();
         }
+        private void BtnDetail_Click(object? sender, EventArgs e)
+        {
+            string checkType = _lstCheckType.SelectedItems[0].Text;
+            string? comboName = _lstCombo.SelectedItems.Count > 0 ? _lstCombo.SelectedItems[0].Text : null;
+            double? station = _lstStation.SelectedItems.Count > 0 ? double.Parse(_lstStation.SelectedItems[0].Text) : null;
+
+            string text = Report.BuildDetailText(_member, checkType, comboName, station);
+            // 弹一个简单窗口显示
+            var form = new Form
+            {
+                Text = "详细参数",
+                Width = 600,
+                Height = 500,
+                StartPosition = FormStartPosition.CenterParent
+            };
+            var txt = new TextBox
+            {
+                Multiline = true,
+                Dock = DockStyle.Fill,
+                ScrollBars = ScrollBars.Both,
+                Font = new Font("Consolas", 10),
+                WordWrap = false,
+                Text = text
+            };
+            form.Controls.Add(txt);
+            form.ShowDialog();
+        }
+        private void BtnReport_Click(object? sender, EventArgs e)
+        {
+            // 拿 SAP 模型文件路径
+            string modelPath = Global.SapModel.GetModelFilepath();
+            string modelDir = Path.GetDirectoryName(modelPath)!;
+
+            // 建"构件计算书"文件夹
+            string reportDir = Path.Combine(modelDir, "构件计算书");
+            Directory.CreateDirectory(reportDir);
+
+            // 生成文件
+            string path = Path.Combine(reportDir, $"构件{_member.Name}计算书.docx");
+            Report.GenerateReport(_member, path);
+
+            // 直接打开
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+        }
+
+
         private void FillCheckTypeList()
         {
             _lstCheckType.Items.Clear();
 
-            // 根据是柱还是梁，加不同的验算类型
             if (_colResult != null)
             {
-                _lstCheckType.Items.Add("压弯/拉弯");
-                _lstCheckType.Items.Add("抗剪");
-                _lstCheckType.Items.Add("平面内稳定");
-                _lstCheckType.Items.Add("平面外稳定");
-                _lstCheckType.Items.Add("长细比");
-                _lstCheckType.Items.Add("局部稳定");
+                AddItem("压弯/拉弯", _colResult.FlexureStrength.MaxUtil > 1.0);
+                AddItem("抗剪", _colResult.ShearStrength.MaxUtil > 1.0);
+                AddItem("平面内稳定", _colResult.InPlaneStability.MaxUtil > 1.0);
+                AddItem("平面外稳定", _colResult.OutPlaneStability.MaxUtil > 1.0);
+                AddItem("长细比", _colResult.Slenderness.MaxUtil > 1.0);
+                AddItem("局部稳定", _colResult.LocalStability.MaxUtil > 1.0);
             }
             else if (_beamResult != null)
             {
-                _lstCheckType.Items.Add("压弯/拉弯");
-                _lstCheckType.Items.Add("抗剪");
-                _lstCheckType.Items.Add("整体稳定");
-                _lstCheckType.Items.Add("长细比");
-                _lstCheckType.Items.Add("局部稳定");
+                AddItem("压弯/拉弯", _beamResult.FlexureStrength.MaxUtil > 1.0);
+                AddItem("抗剪", _beamResult.ShearStrength.MaxUtil > 1.0);
+                AddItem("整体稳定", _beamResult.LateralStability.MaxUtil > 1.0);
+                AddItem("长细比", _beamResult.Slenderness.MaxUtil > 1.0);
+                AddItem("局部稳定", _beamResult.LocalStability.MaxUtil > 1.0);
             }
+        }
+
+        private void AddItem(string text, bool overLimit)
+        {
+            var item = _lstCheckType.Items.Add(text);
+            item.UseItemStyleForSubItems = false;
+            if (overLimit) item.ForeColor = Color.Red;
         }
         private void FillStationList(string checkType, string comboName)
         {
@@ -194,9 +266,10 @@ namespace PortalFrame._4UI
                     foreach (var s in list)
                     {
                         var item = _lstStation.Items.Add(s.Station.ToString("F0"));
-                        item.SubItems.Add(s.Util.ToString("F2"));
+                        item.UseItemStyleForSubItems = false;
+                        item.SubItems.Add(s.Util.Value.ToString("F2"));
                         // 超限的涂红色
-                        if (s.Util > 1.0)item.SubItems[1].ForeColor = Color.Red;
+                        if (s.Util.Value > 1.0)item.SubItems[1].ForeColor = Color.Red;
                     }
                 }
             }
@@ -207,9 +280,10 @@ namespace PortalFrame._4UI
                     foreach (var s in list)
                     {
                         var item = _lstStation.Items.Add(s.Station.ToString("F0"));
-                        item.SubItems.Add(s.Util.ToString("F2"));
+                        item.UseItemStyleForSubItems = false;
+                        item.SubItems.Add(s.Util.Value.ToString("F2"));
                         // 超限的涂红色
-                        if(s.Util > 1.0)item.SubItems[1].ForeColor = Color.Red;
+                        if(s.Util.Value > 1.0)item.SubItems[1].ForeColor = Color.Red;
                     }
                 }
             }
@@ -233,14 +307,14 @@ namespace PortalFrame._4UI
                         comboResults = new Dictionary<string, double>();
                         foreach (var (combo, list) in _colResult.FlexureStrength.Combos)
                         {
-                            comboResults[combo] = list.Max(s => s.Util);
+                            comboResults[combo] = list.Max(s => s.Util.Value);
                         }
                         break;
                     case "抗剪":
                         comboResults = new Dictionary<string, double>();
                         foreach (var (combo, list) in _colResult.ShearStrength.Combos)
                         {
-                            comboResults[combo] = list.Max(s => s.Util);
+                            comboResults[combo] = list.Max(s => s.Util.Value);
                         }
                         break;
                     case "平面内稳定":
@@ -259,6 +333,7 @@ namespace PortalFrame._4UI
                 foreach (var (combo, util) in comboResults)
                 {
                     var item = _lstCombo.Items.Add(combo);
+                    item.UseItemStyleForSubItems = false;
                     item.SubItems.Add(util.ToString("F2"));
 
                     // 超限的涂红色
@@ -271,15 +346,18 @@ namespace PortalFrame._4UI
             // ===== 截面信息 =====
             _lstSec.Items.Clear();
 
-            var secSmall = _colResult?.SecSmall ?? _beamResult?.SecSmall;
-            var secBig = _colResult?.SecBig ?? _beamResult?.SecBig;
+            var secSmall = _member.SecSmall;
+            var secBig = _member.SecBig;
+            bool isTapered = _member.Section.IsTapered;
 
-            if (_colResult?.IsTapered == true || _beamResult?.IsTapered == true)
+            if (isTapered)
             {
                 AddSecRow("截面高度 H", secSmall?.H, "截面高度 H", secBig?.H, false);
-                AddSecRow("翼缘宽度 B", secSmall?.B, "翼缘宽度 B", secBig?.B, false);
+                AddSecRow("翼缘宽度 B", secSmall?.TopB, "翼缘宽度 B", secBig?.TopB, false);
+                AddSecRow("翼缘宽度 B", secSmall?.BotB, "翼缘宽度 B", secBig?.BotB, false);
                 AddSecRow("腹板厚度 tw", secSmall?.Tw, "腹板厚度 tw", secBig?.Tw, false);
-                AddSecRow("翼缘厚度 tf", secSmall?.Tf, "翼缘厚度 tf", secBig?.Tf, false);
+                AddSecRow("翼缘厚度 tf", secSmall?.TopTf, "翼缘厚度 tf", secBig?.TopTf, false);
+                AddSecRow("翼缘厚度 tf", secSmall?.BotTf, "翼缘厚度 tf", secBig?.BotTf, false);
                 AddSecRow("面积 A", secSmall?.Area, "面积 A", secBig?.Area, false);
                 AddSecRow("I33", secSmall?.I33, "I33", secBig?.I33, false);
                 AddSecRow("S33_上", secSmall?.S33_Top, "S33_上", secBig?.S33_Top, false);
@@ -288,9 +366,11 @@ namespace PortalFrame._4UI
             else
             {
                 AddSecRow("截面高度 H", secBig?.H, "", null, false);
-                AddSecRow("翼缘宽度 B", secBig?.B, "", null, false);
+                AddSecRow("翼缘宽度 B", secBig?.TopB, "", null, false);
+                AddSecRow("翼缘宽度 B", secBig?.BotTf, "", null, false);
                 AddSecRow("腹板厚度 tw", secBig?.Tw, "", null, false);
-                AddSecRow("翼缘厚度 tf", secBig?.Tf, "", null, false);
+                AddSecRow("翼缘厚度 tf", secBig?.TopTf, "", null, false);
+                AddSecRow("翼缘宽度 B", secBig?.BotTf, "", null, false);
                 AddSecRow("面积 A", secBig?.Area, "", null, false);
                 AddSecRow("I33", secBig?.I33, "", null, false);
                 AddSecRow("S33_上", secBig?.S33_Top, "", null, false);
@@ -305,10 +385,11 @@ namespace PortalFrame._4UI
 
                 // 平面内
                 var item = _lstSlend.Items.Add("平面内长细比");
-                item.SubItems.Add(slend.Lambda3.ToString("F1"));
+                item.SubItems.Add(slend.LambdaX.Value.ToString("F1"));
                 item.SubItems.Add("利用率");
-                item.SubItems.Add(slend.Util3.ToString("F2"));
-                if (slend.Util3 > 1.0)
+                item.SubItems.Add(slend.UtilX.Value.ToString("F2"));
+                item.UseItemStyleForSubItems = false;
+                if (slend.UtilX.Value > 1.0)
                 {
                     item.SubItems[1].ForeColor = Color.Red;
                     item.SubItems[3].ForeColor = Color.Red;
@@ -316,10 +397,11 @@ namespace PortalFrame._4UI
 
                 // 平面外
                 item = _lstSlend.Items.Add("平面外长细比");
-                item.SubItems.Add(slend.Lambda2.ToString("F1"));
+                item.SubItems.Add(slend.LambdaY.Value.ToString("F1"));
                 item.SubItems.Add("利用率");
-                item.SubItems.Add(slend.Util2.ToString("F2"));
-                if (slend.Util2 > 1.0)
+                item.SubItems.Add(slend.UtilY.Value.ToString("F2"));
+                item.UseItemStyleForSubItems = false;
+                if (slend.UtilY.Value > 1.0)
                 {
                     item.SubItems[1].ForeColor = Color.Red;
                     item.SubItems[3].ForeColor = Color.Red;
@@ -334,10 +416,10 @@ namespace PortalFrame._4UI
 
                 // 上翼缘
                 var item = _lstLocal.Items.Add("上翼缘宽厚比");
-                item.SubItems.Add(local.FlangeWidthThicknessRatio_Top.ToString("F1"));
+                item.SubItems.Add(local.FlangeWidthThicknessRatio_Top.Value.ToString("F1"));
                 item.SubItems.Add("利用率");
-                item.SubItems.Add(local.FlangeUtil_Top.ToString("F2"));
-                if (local.FlangeUtil_Top > 1.0)
+                item.SubItems.Add(local.FlangeUtil_Top.Value.ToString("F2"));
+                if (local.FlangeUtil_Top.Value > 1.0)
                 {
                     item.SubItems[1].ForeColor = Color.Red;
                     item.SubItems[3].ForeColor = Color.Red;
@@ -345,10 +427,10 @@ namespace PortalFrame._4UI
 
                 // 下翼缘
                 item = _lstLocal.Items.Add("下翼缘宽厚比");
-                item.SubItems.Add(local.FlangeWidthThicknessRatio_Bot.ToString("F1"));
+                item.SubItems.Add(local.FlangeWidthThicknessRatio_Bot.Value.ToString("F1"));
                 item.SubItems.Add("利用率");
-                item.SubItems.Add(local.FlangeUtil_Bot.ToString("F2"));
-                if (local.FlangeUtil_Bot > 1.0)
+                item.SubItems.Add(local.FlangeUtil_Bot.Value.ToString("F2"));
+                if (local.FlangeUtil_Bot.Value > 1.0)
                 {
                     item.SubItems[1].ForeColor = Color.Red;
                     item.SubItems[3].ForeColor = Color.Red;
@@ -356,10 +438,10 @@ namespace PortalFrame._4UI
 
                 // 腹板
                 item = _lstLocal.Items.Add("腹板高厚比");
-                item.SubItems.Add(local.WebHightThicknessRatio.ToString("F1"));
+                item.SubItems.Add(local.WebHightThicknessRatio.Value.ToString("F1"));
                 item.SubItems.Add("利用率");
-                item.SubItems.Add(local.WebUtil.ToString("F2"));
-                if (local.WebUtil > 1.0)
+                item.SubItems.Add(local.WebUtil.Value.ToString("F2"));
+                if (local.WebUtil.Value > 1.0)
                 {
                     item.SubItems[1].ForeColor = Color.Red;
                     item.SubItems[3].ForeColor = Color.Red;
@@ -384,7 +466,8 @@ namespace PortalFrame._4UI
 
         private void LstCheckType_SelectedIndexChanged(object? sender, EventArgs e)
         {
-            string checkType = _lstCheckType.SelectedItem?.ToString() ?? "";
+            if (_lstCheckType.SelectedItems.Count == 0) return;
+            string checkType = _lstCheckType.SelectedItems[0].Text;
             FillComboList(checkType);
         }
         private void LstCombo_SelectedIndexChanged(object? sender, EventArgs e)
@@ -392,7 +475,7 @@ namespace PortalFrame._4UI
             if (_lstCombo.SelectedItems.Count == 0) return;
 
             string comboName = _lstCombo.SelectedItems[0].Text;
-            string checkType = _lstCheckType.SelectedItem?.ToString() ?? "";
+            string checkType = _lstCheckType.SelectedItems[0].Text;
 
             FillStationList(checkType, comboName);
         }
@@ -402,11 +485,15 @@ namespace PortalFrame._4UI
             WorstResult? worst = _colResult?.Worst ?? _beamResult?.Worst;
             if (worst == null || worst.CheckType == "") return;
 
-
-            // 1. 选最不利的验算类型（会自动触发填组合列表）
-            int typeIndex = _lstCheckType.Items.IndexOf(worst.CheckType);
-            if (typeIndex < 0) return;
-            _lstCheckType.SelectedIndex = typeIndex;
+            // 1. 选最不利的验算类型
+            foreach (ListViewItem item in _lstCheckType.Items)
+            {
+                if (item.Text == worst.CheckType)
+                {
+                    item.Selected = true;
+                    break;
+                }
+            }
 
             // 2. 选最不利的组合（会自动触发填测站列表）
             if (worst.BestCombo != "")
@@ -434,6 +521,43 @@ namespace PortalFrame._4UI
                 }
             }
         }
+        // 更新“显示详细文件”按钮的可用状态
+        private void UpdateBtnDetailEnabled()
+        {
+            // 没选验算类型，直接禁用
+            if (_lstCheckType.SelectedItems.Count == 0)
+            {
+                _btnDetail.Enabled = false;
+                return;
+            }
+
+            string checkType = _lstCheckType.SelectedItems[0].Text;
+
+            // 静态验算（长细比、局部稳定）：只需要选验算类型
+            if (checkType == "长细比" || checkType == "局部稳定")
+            {
+                _btnDetail.Enabled = true;
+                return;
+            }
+
+            // 稳定验算（平面内/外、整体稳定）：需要选验算类型 + 组合
+            if (checkType == "平面内稳定" || checkType == "平面外稳定" || checkType == "整体稳定")
+            {
+                _btnDetail.Enabled = _lstCombo.SelectedItems.Count > 0;
+                return;
+            }
+
+            // 强度验算（压弯/拉弯、抗剪）：需要选验算类型 + 组合 + 测站
+            if (checkType == "压弯/拉弯" || checkType == "抗剪")
+            {
+                _btnDetail.Enabled = _lstCombo.SelectedItems.Count > 0
+                                  && _lstStation.SelectedItems.Count > 0;
+                return;
+            }
+
+            _btnDetail.Enabled = false;
+        }
+
 
     }
 }
