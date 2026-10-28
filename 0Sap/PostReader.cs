@@ -20,9 +20,9 @@ namespace PortalFrame._0Sap
         }
 
         // 读某组合下所有杆件的测站内力
-        public static Dictionary<string, List<ForceData>> GetAllFrameForces(string comboName)
+        public static Dictionary<string, Dictionary<double, ForceData>> GetAllFrameForces(string comboName)
         {
-            var result = new Dictionary<string, List<ForceData>>();
+            var result = new Dictionary<string, Dictionary<double, ForceData>>();
 
             // 先拿所有杆件名
             int nFrame = 0;
@@ -39,9 +39,9 @@ namespace PortalFrame._0Sap
         }
 
         // 读某杆件在某组合下的测站内力
-        private static List<ForceData> GetFrameForces(string frameName, string comboName)
+        private static Dictionary<double, ForceData> GetFrameForces(string frameName, string comboName)
         {
-            var results = new List<ForceData>();
+            var results = new Dictionary<double, ForceData>();
 
             int n = 0;
             string[] obj = null!, elm = null!, loadCase = null!, stepType = null!;
@@ -61,22 +61,18 @@ namespace PortalFrame._0Sap
             {
                 if (loadCase[i] == comboName)
                 {
-                    results.Add(new ForceData
+                    results[objSta[i]] = new ForceData
                     {
-                        Station = objSta[i],
                         P = P[i],
                         V2 = V2[i],
                         V3 = V3[i],
                         T = T[i],
                         M2 = M2[i],
                         M3 = M3[i]
-                    });
+                    };
                 }
             }
             return results;
         }
-
-
-        // - 读某杆件的位移/挠度
     }
 }

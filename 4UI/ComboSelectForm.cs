@@ -1,4 +1,6 @@
-﻿using PortalFrame._5data;
+﻿using PortalFrame._0Sap;
+using PortalFrame._3Dispatch;
+using PortalFrame._5data;
 
 
 namespace PortalFrame._4UI
@@ -15,7 +17,7 @@ namespace PortalFrame._4UI
 
         public ComboSelectForm(DesignCombos Combos, List<string> allCombos)
         {
-            this.Font = UiConfig.DefaultFont;
+            this.Font = Global.Ui.DefaultFont;
             FormBorderStyle = FormBorderStyle.FixedSingle;   // 固定大小，不能拖拽
             MaximizeBox = false;                              // 禁用最大化
             MinimizeBox = false;                              // 禁用最小化
@@ -134,6 +136,7 @@ namespace PortalFrame._4UI
             {
                 _Combos.SelectedCombos.Add(item.ToString()!);
             }
+            Persistence.SaveSelectedCombos(Global.Data.Combos.SelectedCombos);// 保存用户选中的组合
             DialogResult = DialogResult.OK;
             Close();
         }

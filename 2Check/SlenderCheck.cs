@@ -11,8 +11,11 @@ namespace PortalFrame._2Check
             // 从result里读参数
             var sl = member.CheckResult.Slenderness;
             var gen = member.CheckResult.General;
+
             double H = member.Frame.Length;    // 柱高
-            double fy = member.Material.GetDesignValues(member.SecBig.Tw).fy;
+            var secBig = member.StationSections[member.EndStations[1]];
+            var secSmall = member.StationSections[member.EndStations[0]];
+            double fy = member.Material.GetDesignValues(secBig.Tw).fy;
             double E = MaterialData.E;
             double ly = sl.Ly.Value;
             double lambdaLimit = gen.LambdaLimit.Value;
@@ -21,8 +24,8 @@ namespace PortalFrame._2Check
             double R33, R22;
             if (member.Section is TaperedSectionData)
             {
-                R33 = member.SecBig.R33;
-                R22 = member.SecBig.R22;
+                R33 = secBig.R33;
+                R22 = secBig.R22;
             }
             else if (member.Section is HSectionData sec)
             {
@@ -38,8 +41,8 @@ namespace PortalFrame._2Check
             {
                 sl.Kz.SetCal(member.Kz.Value);
                 double Kz = sl.Kz.Value;
-                double I1 = member.SecBig.I33;
-                double I0 = member.SecSmall.I33;
+                double I1 = secBig.I33;
+                double I0 = secSmall.I33;
 
                 double icl = E * I1 / H;
                 double K = (Kz / (6.0 * icl)) * Math.Pow(I1 / I0, 0.29);
@@ -67,7 +70,7 @@ namespace PortalFrame._2Check
             sl.PhiY.SetCal(Phi(lambdaBarY));
 
             // 欧拉临界力
-            double A = member.SecBig.Area;
+            double A = secBig.Area;
             sl.NcrX.SetCal(Math.PI * Math.PI * E * A / (lambdaX * lambdaX));
             sl.NcrY.SetCal(Math.PI * Math.PI * E * A / (lambdaY * lambdaY));
 

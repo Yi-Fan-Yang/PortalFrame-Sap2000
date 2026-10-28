@@ -24,37 +24,34 @@ namespace PortalFrame._3Dispatch
                     MessageBox.Show("请先在SAP中完成分析后，再读取数据", "提示");
                     return;
                 }
-                // ===== 先清空旧数据 =====
-                Global.ModelData.Joints.Clear();
-                Global.ModelData.Frames.Clear();
-                Global.ModelData.Sections.Clear();
-                Global.ModelData.Materials.Clear();
-                Global.ModelData.FrameSectionMap.Clear();
-                Global.ModelData.Members.Clear();
-                Global.ModelData.AllCombos.Clear();
-                Global.ModelData.Forces.Clear();
+                // ===== 清空旧数据 =====
+                Global.Data.Joints.Clear();
+                Global.Data.Frames.Clear();
+                Global.Data.Sections.Clear();
+                Global.Data.Materials.Clear();
+                Global.Data.FrameSectionMap.Clear();
+                Global.Data.Members.Clear();
+                Global.Data.AllCombos.Clear();
+                Global.Data.Forces.Clear();
 
-                // ===== 1. 读原始数据 =====
-                Global.ModelData.Joints = PreReader.GetAllJoints();
-                Global.ModelData.Frames = PreReader.GetAllFrames(Global.ModelData.Joints);
-                Global.ModelData.Sections = PreReader.GetAllSections();
-                Global.ModelData.Materials = PreReader.GetAllMaterials();
-                Global.ModelData.FrameSectionMap = PreReader.GetFrameSectionMap();
-                Global.ModelData.AllCombos = PostReader.GetAllComboNames();
-
-                foreach (var combo in Global.ModelData.AllCombos)
+                // ===== 读原始数据 =====
+                Global.Data.Joints = PreReader.GetAllJoints();
+                Global.Data.Frames = PreReader.GetAllFrames(Global.Data.Joints);
+                Global.Data.Sections = PreReader.GetAllSections();
+                Global.Data.Materials = PreReader.GetAllMaterials();
+                Global.Data.FrameSectionMap = PreReader.GetFrameSectionMap();
+                Global.Data.AllCombos = PostReader.GetAllComboNames();
+                PreReader.BuildGroupMappings();
+                foreach (var combo in Global.Data.AllCombos)
                 {
-                    Global.ModelData.Forces[combo] = PostReader.GetAllFrameForces(combo);
+                    Global.Data.Forces[combo] = PostReader.GetAllFrameForces(combo);
                 }
 
-                // ===== 2. 数据预处理 =====
+                // ===== 数据预处理 =====
                 MemberBuilder.BuildMembers();
+                // 读持久化的首选项和覆盖项，分发到所有构件的结果类
+                Persistence.LoadAll();
 
-                // ===== 弹窗选 group（用于计算 Kz） =====
-                var groupNames = PreReader.GetGroupList();
-                var dlg = new GroupSelectForm(Global.Groups, Global.ModelData.Joints.Count, Global.ModelData.Members.Count, groupNames);
-                dlg.ShowDialog();
-                MemberBuilder.GetKz(Global.SapModel, Global.Groups);
             }
             catch (Exception ex)
             {
@@ -62,82 +59,93 @@ namespace PortalFrame._3Dispatch
             }
         }
 
-
         public static void RunCheck(HashSet<string>? selectedMembers = null)
         {
-
-            // 如果没选，就算全部
-            IEnumerable<string> memberNames;
-            if (selectedMembers == null || selectedMembers.Count == 0)
+            try
             {
-                memberNames = Global.ModelData.Members.Keys;
+                // 如果没选，就算全部
+                IEnumerable<string> memberNames;
+                if (selectedMembers == null || selectedMembers.Count == 0)
+                {
+                    memberNames = Global.Data.Members.Keys;
+                }
+                else
+                {
+                    memberNames = selectedMembers;
+                }
+
+                if (Global.Data.AllCombos.Count == 0)
+                {
+                    MessageBox.Show("请先选择组合", "提示");
+                    return;
+                }
+
+                foreach (var memberName in memberNames)
+                {
+                    if (!Global.Data.Members.TryGetValue(memberName, out var member)) continue;
+                    if (!member.IsCheckable) continue;   // 不参与验算的跳过
+                    CheckRunner.CheckMember(member);
+                }
             }
-            else
+            catch (Exception ex)
             {
-                memberNames = selectedMembers;
-            }
-
-            if (Global.ModelData.AllCombos.Count == 0)
-            {
-                MessageBox.Show("请先选择组合", "提示");
-                return;
-            }
-
-            foreach (var memberName in memberNames)
-            {
-                if (!Global.ModelData.Members.TryGetValue(memberName, out var member)) continue;
-                CheckRunner.CheckMember(member);
-
+                // 把所有错误都弹出来，就不会直接崩了
+                MessageBox.Show($"验算出错：{ex.Message}\n\n{ex.StackTrace}", "错误");
             }
         }
+        
         //获取对应组合的构件内力
-        public static Dictionary<string, List<ForceData>> GetMemberForces(string memberName)
+        public static Dictionary<string, Dictionary<double, ForceData>> GetMemberForces(string memberName)
         {
-            var result = new Dictionary<string, List<ForceData>>();
+            var result = new Dictionary<string, Dictionary<double, ForceData>>();
 
-            foreach (var comboName in Global.ModelData.AllCombos)
+            foreach (var comboName in Global.Data.AllCombos)
             {
-                if (Global.ModelData.Forces.ContainsKey(comboName) && Global.ModelData.Forces[comboName].ContainsKey(memberName))
+                if (Global.Data.Forces.ContainsKey(comboName) && Global.Data.Forces[comboName].ContainsKey(memberName))
                 {
-                    result[comboName] = Global.ModelData.Forces[comboName][memberName];
+                    result[comboName] = Global.Data.Forces[comboName][memberName];
                 }
             }
             return result;
         }
 
-        /// <summary>
-        /// 根据验算类型，返回所有构件的利用率字典（用来画布着色）
-        /// </summary>
+        // 根据验算类型，返回所有构件的利用率字典（用来画布着色）
         public static Dictionary<string, MemberDisplayInfo> GetMemberDisplayInfo(string checkType)
         {
             var result = new Dictionary<string, MemberDisplayInfo>();
 
-            foreach (var (name, member) in Global.ModelData.Members)
+            foreach (var (name, member) in Global.Data.Members)
             {
+                if (!member.IsCheckable) continue;
                 var cr = member.CheckResult;
                 double util = checkType switch
                 {
                     "汇总" => cr.Worst.MaxUtil,
-                    "压弯/拉弯" => cr.FlexureStrength.MaxUtil,
-                    "抗剪" => cr.ShearStrength.MaxUtil,
-                    "长细比" => Math.Max(cr.Slenderness.UtilX.Value, cr.Slenderness.UtilY.Value),
-                    "局部稳定" => cr.LocalStability.MaxUtil,
+                    CheckTypes.Flexure => cr.FlexureStrength.GetWorst().MaxUtil,
+                    CheckTypes.Shear => cr.ShearStrength.GetWorst().MaxUtil,
+                    CheckTypes.Slenderness => Math.Max(cr.Slenderness.UtilX.Value, cr.Slenderness.UtilY.Value),
+                    CheckTypes.LocalStability => cr.LocalStability.MaxUtil,
+                    CheckTypes.PhiB => cr.PhiBResult.MinPhiB,
                     // 柱专属
-                    "平面内稳定" when member.Type == MemberType.Column => ((ColumnCheckResult)cr).InPlaneStability.MaxUtil,
-                    "平面外稳定" when member.Type == MemberType.Column => ((ColumnCheckResult)cr).OutPlaneStability.MaxUtil,
+                    CheckTypes.ColumnInPlane when member.Type == MemberType.Column => cr.InPlaneStability.MaxUtil,
+                    CheckTypes.ColumnOutPlane when member.Type == MemberType.Column => cr.OutPlaneStability.MaxUtil,
                     // 梁专属
-                    "整体稳定" when member.Type == MemberType.Beam => ((BeamCheckResult)cr).LateralStability.MaxUtil,
+                    CheckTypes.BeamLateral when member.Type == MemberType.Beam => cr.LateralStability.MaxUtil,
                     _ => 0
                 };
 
                 string text = checkType switch
                 {
-                    "长细比" => $"{cr.Slenderness.UtilX.Value:F2}/{cr.Slenderness.UtilY.Value:F2}",
-                    "局部稳定" => $"{cr.LocalStability.FlangeUtil_Top.Value:F2}/{cr.LocalStability.WebUtil.Value:F2}",
+                    CheckTypes.Slenderness => $"{cr.Slenderness.UtilX.Value:F2}/{cr.Slenderness.UtilY.Value:F2}",
+                    CheckTypes.LocalStability => $"{cr.LocalStability.FlangeUtil_Top.Value:F2}/{cr.LocalStability.FlangeUtil_Bot.Value:F2}/{cr.LocalStability.WebUtil.Value:F2}",
                     _ => util.ToString("F2")
                 };
-
-                result[name] = new MemberDisplayInfo { Util = util, Text = text };
+                double utilLimit = checkType switch
+                {
+                    CheckTypes.Slenderness or CheckTypes.LocalStability => 1.0,   // 长细比/板件宽厚比固定1.0
+                    _ => cr.General.UtilLimit.Value,                               // 强度/稳定/汇总用UtilLimit
+                };
+                result[name] = new MemberDisplayInfo { Util = util, UtilLimit = utilLimit , Text = text, };
             }
 
             return result;

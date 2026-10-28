@@ -1,4 +1,5 @@
 ﻿using Microsoft.VisualBasic.Devices;
+using PortalFrame._0Sap;
 using PortalFrame._1Model;
 using PortalFrame._4UI;
 using PortalFrame._5data;
@@ -39,11 +40,13 @@ namespace PortalFrame._3Dispatch
         /// </summary>
         public class DrawPens
         {
-            public Pen Normal = new Pen(Color.Black, 2);
-            public Pen Selected = new Pen(Color.Blue, 3);
-            public Pen Green = new Pen(Color.Green, 2);
-            public Pen Yellow = new Pen(Color.Yellow, 2);
-            public Pen Red = new Pen(Color.Red, 2);
+            public Pen Normal = new Pen(Global.Ui.BackColor == Color.White ? Color.Black : Color.White, 2);
+            public Pen Selected = new Pen(Global.Ui.SelectColor, 3);
+            public Pen Uncheckable = new Pen(Global.Ui.UncheckColor, 1);
+            public Pen OLC3 = new Pen(Global.Ui.OverLimitColor3, 2);
+            public Pen OLC2 = new Pen(Global.Ui.OverLimitColor2, 2);
+            public Pen OLC1 = new Pen(Global.Ui.OverLimitColor1, 2);
+            public Pen OLC0 = new Pen(Global.Ui.OverLimitColor0, 2);
         }
         public void Draw(Graphics g, int canvasWidth, int canvasHeight)
         {
@@ -61,14 +64,20 @@ namespace PortalFrame._3Dispatch
 
         private Pen GetMemberPen(string memberName)
         {
+            // 不参与验算的构件画灰色细线
+            if (Global.Data.Members.TryGetValue(memberName, out var m) && !m.IsCheckable)
+                return _pens.Uncheckable;
+
             if (_selectedMembers.Contains(memberName))
                 return _pens.Selected;
 
             if (_currentDisplay.TryGetValue(memberName, out var info))
             {
-                if (info.Util <= 0.8) return _pens.Green;
-                if (info.Util <= 1.0) return _pens.Yellow;
-                return _pens.Red;
+                GetUtilThresholds(info, out Dictionary<int, double> thresholds);
+                if (info.Util <= thresholds[2]) return _pens.OLC3;
+                if (info.Util <= thresholds[1]) return _pens.OLC2;
+                if (info.Util <= thresholds[0]) return _pens.OLC1;
+                return _pens.OLC0;
             }
 
             return _pens.Normal;
@@ -127,7 +136,7 @@ namespace PortalFrame._3Dispatch
                 if (_currentDisplay.TryGetValue(f.Name, out var info))
                 {
                     PointF mid = new PointF((p1.X + p2.X) / 2, (p1.Y + p2.Y) / 2 - 10);
-                    g.DrawString(info.Text, UiConfig.DefaultFont, GetMemberBrush(f.Name), mid);
+                    g.DrawString(info.Text, Global.Ui.DefaultFont, GetMemberBrush(f.Name), mid);
                 }
             }
         }
@@ -144,13 +153,15 @@ namespace PortalFrame._3Dispatch
         private Brush GetMemberBrush(string memberName)
         {
             if (_selectedMembers.Contains(memberName))
-                return Brushes.Blue;
+                return new SolidBrush(Global.Ui.SelectColor);
 
             if (_currentDisplay.TryGetValue(memberName, out var info))
             {
-                if (info.Util <= 0.8) return Brushes.Green;
-                if (info.Util <= 1.0) return Brushes.Yellow;
-                return Brushes.Red;
+                GetUtilThresholds(info, out Dictionary<int, double> thresholds);
+                if (info.Util <= thresholds[2]) return new SolidBrush(Global.Ui.OverLimitColor3);
+                if (info.Util <= thresholds[1]) return new SolidBrush(Global.Ui.OverLimitColor2);
+                if (info.Util <= thresholds[0]) return new SolidBrush(Global.Ui.OverLimitColor1);
+                return new SolidBrush(Global.Ui.OverLimitColor0);
             }
 
             return Brushes.Black;
@@ -218,9 +229,7 @@ namespace PortalFrame._3Dispatch
         }
 
 
-        /// <summary>
-        /// =============================选择=========================
-        /// </summary>
+        // =============================选择=========================
         public string? HitTest(Point screenPos)
         {
             string? bestMatch = null;
@@ -228,6 +237,7 @@ namespace PortalFrame._3Dispatch
 
             foreach (var (name, (p1, p2)) in _memberScreenCoords)
             {
+                if (!Global.Data.Members[name].IsCheckable) continue;  // 不参与验算的选不到
                 double dist = DistancePointToLine(screenPos, p1, p2);
                 if (dist < minDist)
                 {
@@ -235,7 +245,6 @@ namespace PortalFrame._3Dispatch
                     bestMatch = name;
                 }
             }
-
             return bestMatch;
         }
         /// <param name="rect">拉框的屏幕矩形</param>
@@ -246,6 +255,7 @@ namespace PortalFrame._3Dispatch
 
             foreach (var (name, (p1, p2)) in _memberScreenCoords)
             {
+                if (!Global.Data.Members[name].IsCheckable) continue;
                 if (isWindowMode)
                 {
                     // 窗口选：两个端点都在框里
@@ -370,5 +380,15 @@ namespace PortalFrame._3Dispatch
         {
             _currentDisplay = display;
         }
+        private void GetUtilThresholds(MemberDisplayInfo info, out Dictionary<int, double> thresholds)
+        {
+            thresholds = new Dictionary<int, double>
+            {
+                { 0, info.UtilLimit },
+                { 1, 0.8 * info.UtilLimit },
+                { 2, 0.6 * info.UtilLimit }
+            };
+        }
+
     }
 }

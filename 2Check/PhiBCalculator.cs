@@ -17,31 +17,51 @@ namespace PortalFrame._2Check
         public static void CalcPhiB(MemberData member, string comboName)
         {
             // 从 member.CheckResult 里找对应的 PhiBDetails
-            PhiBDetails d = GetPhiBDetails(member, comboName);
+            PhiBSingleResult d = member.CheckResult.PhiBResult.Collection[comboName];
             // 1. 读当前组合的内力
             var forces = member.DesignForces[comboName];
 
-            // 2. 算Mcr
+            // ===== 公共参数：两端弯矩、受压模量、应力比（不管有没有隅撑都要算）=====
+            var secBig = member.StationSections[member.EndStations[1]];
+            var secSmall = member.StationSections[member.EndStations[0]];
+            double fy = member.Material.GetDesignValues(secBig.Tw).fy;
+            double gammaX = d.GammaX.Value;   // 从覆盖项读
+            double gamma = (secBig.H - secSmall.H) / secSmall.H;  // 楔率
+            var fBig = forces[member.EndStations[1]];
+            var fSmall = forces[member.EndStations[0]];
+            double M1 = Math.Abs(fBig.M3);
+            double M0 = Math.Abs(fSmall.M3);
+            bool topCompressed = fBig.M3 >= 0;
+            double Wx1 = topCompressed ? secBig.S33_Top : secBig.S33_Bot;
+            double Wx0 = topCompressed ? secSmall.S33_Top : secSmall.S33_Bot;
+            double kM = M0 / M1;
+            double kSigma = (M0 / Wx0) / (M1 / Wx1);
+
+            // 统一 SetCal 到结果类
+            d.M1.SetCal(M1);
+            d.M0.SetCal(M0);
+            d.Wx1.SetCal(Wx1);
+            d.Wx0.SetCal(Wx0);
+            d.KM.SetCal(kM);
+            d.KSigma.SetCal(kSigma);
+            d.Gamma.SetCal(gamma);
+
+            // 3. 算Mcr
             if (d.HasBrace.Value == 1) CalcMcrWithBrace(member, comboName);// 7.1.6条有隅撑
             else CalcMcrNoBrace(member, comboName);// 7.1.4条无隅撑
 
-            // 3. 材料强度
-            double fy = member.Material.GetDesignValues(member.SecBig.Tw).fy;
-            double gammaX = d.GammaX.Value;   // 从覆盖项读
-
-            // 4. 指数n
-            double n = 1.51 * Math.Pow((1 + d.Gamma.Value), 1.0 / 3.0);
-
-            // 5. 通用长细比λb
+            // 4. 通用长细比λb
             double lambdaB = Math.Sqrt(gammaX * d.Wx1.Value * fy / d.Mcr.Value);
 
+            // 5. 指数n
+            double b1 = topCompressed ? secBig.TopB : secBig.BotB;
+            double n = 1.51 * Math.Pow(b1 / secBig.H0, 1.0 / 3.0) / Math.Pow(lambdaB, 0.1);
+
             // 6. λb0
-            double lambdaB0 = (0.55 - 0.25 * d.KSigma.Value) / Math.Pow(1 + d.Gamma.Value, n);
+            double lambdaB0 = (0.55 - 0.25 * d.KSigma.Value) / Math.Pow(1 + d.Gamma.Value, 0.2);
 
             // 7. φb
-            double phiB = 1.0 / Math.Pow(
-                1 - Math.Pow(lambdaB0, 2 * n) + Math.Pow(lambdaB, 2 * n),
-                1.0 / n);
+            double phiB = 1.0 / Math.Pow(1 - Math.Pow(lambdaB0, 2 * n) + Math.Pow(lambdaB, 2 * n),1.0 / n);
 
             // 8. 填结果（SetCal：程序算的）
             d.n.SetCal(n);
@@ -56,41 +76,41 @@ namespace PortalFrame._2Check
         private static void CalcMcrNoBrace(MemberData member, string comboName)
         {
             // 内部自己找 PhiBDetails
-            PhiBDetails d = GetPhiBDetails(member, comboName);
+            PhiBSingleResult d = member.CheckResult.PhiBResult.Collection[comboName];
             var forces = member.DesignForces[comboName];
             double E = MaterialData.E;
             double G = MaterialData.G;
 
             // 1. 取两端截面和内力（直接从 member 读大小端）
-            var secBig = member.SecBig;
-            var secSmall = member.SecSmall;
-            var fBig = forces.First(f => Math.Abs(f.Station - secBig.Station) < 1.0);
-            var fSmall = forces.First(f => Math.Abs(f.Station - secSmall.Station) < 1.0);
+            var secBig = member.StationSections[member.EndStations[1]];
+            var secSmall = member.StationSections[member.EndStations[0]];
+            var fBig = forces[member.EndStations[1]];
+            var fSmall = forces[member.EndStations[0]];
+            double gamma = d.Gamma.Value;   // 直接从结果类里读
 
             // 2. 两端弯矩
-            double M1 = Math.Abs(fBig.M3);
-            double M0 = Math.Abs(fSmall.M3);
+            double M1 = d.M1.Value;
+            double M0 = d.M0.Value;
 
             // 3. 受压边缘模量
-            bool topCompressed = fBig.M3 >= 0;
-            double Wx1 = topCompressed ? secBig.S33_Top : secBig.S33_Bot;
-            double Wx0 = topCompressed ? secSmall.S33_Top : secSmall.S33_Bot;
+            double Wx1 = d.Wx1.Value;
+            double Wx0 = d.Wx0.Value;
 
             // 4. kM、kSigma
-            double kM = M0 / M1;
-            double kSigma = (M0 / Wx0) / (M1 / Wx1);
+            double kM = d.KM.Value;
+            double kSigma = d.KSigma.Value;
 
             // 5. 楔率
             double h1 = secBig.H0;
             double h0 = secSmall.H0;
-            double gamma = (h1 - h0) / h0;
 
             // 6. 两个翼缘绕弱轴惯性矩
+            bool topCompressed = fBig.M3 >= 0;
             double IyTop = secBig.TopB * secBig.TopB * secBig.TopB * secBig.TopTf / 12.0;
             double IyBot = secBig.BotB * secBig.BotB * secBig.BotB * secBig.BotTf / 12.0;
             double IyT = topCompressed ? IyTop : IyBot;
             double IyB = topCompressed ? IyBot : IyTop;
-            double Iy = secBig.I22;
+            double Iy = secBig.I33;
 
             // 7. etaI、eta
             double etaI = IyB / IyT;
@@ -118,13 +138,6 @@ namespace PortalFrame._2Check
             double Mcr = C1 * Math.PI * Math.PI * E * Iy / (L * L) * (betaXEta + sqrtTerm);
 
             // 12. 填结果（SetCal：程序算的）
-            d.M1.SetCal(M1);
-            d.M0.SetCal(M0);
-            d.Wx1.SetCal(Wx1);
-            d.Wx0.SetCal(Wx0);
-            d.KM.SetCal(kM);
-            d.KSigma.SetCal(kSigma);
-            d.Gamma.SetCal(gamma);
             d.IyT.SetCal(IyT);
             d.IyB.SetCal(IyB);
             d.Iy.SetCal(Iy);
@@ -143,9 +156,9 @@ namespace PortalFrame._2Check
         /// </summary>
         public static void CalcMcrWithBrace(MemberData member, string comboName)
         {
-            var sec = member.SecBig;
+            var sec = member.StationSections[member.EndStations[1]];
             // 内部自己找 PhiBDetails
-            PhiBDetails d = GetPhiBDetails(member, comboName);
+            PhiBSingleResult d = member.CheckResult.PhiBResult.Collection[comboName];
             double E = MaterialData.E;
             double G = MaterialData.G;
 
@@ -163,7 +176,7 @@ namespace PortalFrame._2Check
             double h = sec.H0;
             double HToSc = sec.HToSc;
             double J = sec.J;
-            double Iy = sec.I22;
+            double Iy = sec.I33;
             double Iw = sec.Iw;
 
             double I1 = sec.TopTf * Math.Pow(sec.TopB, 3) / 12.0;
@@ -181,34 +194,24 @@ namespace PortalFrame._2Check
             double term2 = (a + h) * (3 - 4 * beta) * beta * lp * lp * Math.Tan(alphaRad) / (6 * E * Ip);
             double term3 = lk * lk / (beta * lp * E * Ak * Math.Cos(alphaRad));
 
-            double kb = (1.0 / lkk) / Math.Pow(term1 + term2 + term3, -1);
+            double kb = (1.0 / lkk) * Math.Pow(term1 + term2 + term3, -1);
 
             // ===== 4. 算 Mcr =====
             double mcr = (G * J + 2 * e * Math.Sqrt(kb * (E * Iy * e1 * e1 + E * Iw)))
                        / (2 * (e1 - betaX));
 
-
+            d.h.SetCal(h);
+            d.Iy.SetCal(Iy);
+            d.Iw.SetCal(Iw);
+            d.J.SetCal(J);
+            d.I1.SetCal(I1);
+            d.I2.SetCal(I2);
             d.Lk.SetCal(lk);
-            d.E.SetCal(e);
-            d.E1.SetCal(e1);
-            d.BetaXBrace.SetCal(betaX);
+            d.e.SetCal(e);
+            d.e1.SetCal(e1);
+            d.BetaX.SetCal(betaX);
             d.kb.SetCal(kb);
             d.Mcr.SetCal(mcr);
         }
-
-        private static PhiBDetails GetPhiBDetails(MemberData member, string comboName)
-        {
-            if (member.Type == MemberType.Column)
-            {
-                var col = (ColumnCheckResult)member.CheckResult;
-                return col.OutPlaneStability.PhiBDetails[comboName];
-            }
-            else
-            {
-                var beam = (BeamCheckResult)member.CheckResult;
-                return beam.LateralStability.PhiBDetails[comboName];
-            }
-        }
-
     }
 }

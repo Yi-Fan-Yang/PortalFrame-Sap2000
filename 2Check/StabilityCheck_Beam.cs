@@ -12,13 +12,13 @@ namespace PortalFrame._2Check
     {
         public static void OverallStabilityCheck(MemberData member, string comboName)
         {
-            var beamResult = (BeamCheckResult)member.CheckResult;
+            var result = member.CheckResult;
 
             // 1. 读当前组合的内力
             var forces = member.DesignForces[comboName];
 
             // 2. 先算 φb（结果存 PhiBDetails）
-            var detail = beamResult.LateralStability.PhiBDetails[comboName];
+            var detail = result.PhiBResult.Collection[comboName];
             PhiBCalculator.CalcPhiB(member, comboName);
 
             // 3. 从 PhiBDetails 读
@@ -28,11 +28,17 @@ namespace PortalFrame._2Check
             double Wx1 = detail.Wx1.Value;
 
             // 4. 算利用率（梁整体稳定只有 term2，没有轴力项）
-            double f = member.Material.GetDesignValues(member.SecBig.TopTf).f;
+            var secBig = member.StationSections[member.EndStations[1]];
+            double f = member.Material.GetDesignValues(secBig.TopTf).f;
             double util = M1 / (gammaX * phiB * Wx1 * f);
 
             // 5. 写回结果
-            beamResult.LateralStability.Combos[comboName] = util;
+            result.LateralStability.Collection[comboName].M1.SetCal(M1);
+            result.LateralStability.Collection[comboName].GammaX.SetCal(gammaX);
+            result.LateralStability.Collection[comboName].PhiB.SetCal(phiB);
+            result.LateralStability.Collection[comboName].W1.SetCal(Wx1);
+            result.LateralStability.Collection[comboName].f.SetCal(f);
+            result.LateralStability.Collection[comboName].Util.SetCal(util);
         }
 
 

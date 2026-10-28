@@ -1,7 +1,6 @@
 ﻿using PortalFrame._1Model;
 using PortalFrame._2CheckResults;
-using PortalFrame._5data;
-using System.Text;
+using System.Reflection;
 using Xceed.Document.NET;
 using Xceed.Words.NET;
 
@@ -9,69 +8,56 @@ namespace PortalFrame._3Dispatch
 {
     public static class Report
     {
-        //=====================显示详细信息========================
-        public static string BuildDetailText(MemberData member, string checkType, string? comboName, double? station)
+        // 分组结构
+        public class DetailGroup
         {
-            var sb = new StringBuilder();
-            sb.AppendLine($"===== 构件 {member.Name}：{checkType} 详细参数 =====");
-            sb.AppendLine();
-
-            var result = member.CheckResult;
-            object? target = null;  // 要遍历的目标对象
-
-            // 根据验算类型，找到要显示的结果对象
-            if (checkType == "长细比")
-            {
-                target = result.Slenderness;
-            }
-            else if (checkType == "局部稳定")
-            {
-                target = result.LocalStability;
-            }
-            else if (checkType == "平面内稳定" && result is ColumnCheckResult colIn && comboName != null)
-            {
-                target = colIn.InPlaneStability;
-            }
-            else if (checkType == "平面外稳定" && result is ColumnCheckResult colOut && comboName != null)
-            {
-                target = colOut.OutPlaneStability;
-                // 还要把对应组合的 PhiBDetails 也加进去
-                AppendObject(sb, colOut.OutPlaneStability.PhiBDetails[comboName], "φb 计算过程");
-                return sb.ToString();  // PhiBDetails 已经单独输出了，直接返回
-            }
-            else if (checkType == "整体稳定" && result is BeamCheckResult beam && comboName != null)
-            {
-                target = beam.LateralStability;
-                AppendObject(sb, beam.LateralStability.PhiBDetails[comboName], "φb 计算过程");
-                return sb.ToString();
-            }
-            else if (checkType == "压弯/拉弯" && comboName != null && station.HasValue)
-            {
-                var flexList = result.FlexureStrength.Combos[comboName];
-                target = flexList.First(s => Math.Abs(s.Station - station.Value) < 1.0);
-            }
-            else if (checkType == "抗剪" && comboName != null && station.HasValue)
-            {
-                var shearList = result.ShearStrength.Combos[comboName];
-                target = shearList.First(s => Math.Abs(s.Station - station.Value) < 1.0);
-            }
-
-            // 遍历目标对象，输出所有 ParaItem
-            if (target != null)
-            {
-                AppendObject(sb, target);
-            }
-
-            return sb.ToString();
+            public string Title = "";
+            public List<(int order, string name, string value, string unit)> Items = new();
         }
 
-        // 递归遍历对象，把所有 ParaItem 输出到 sb
-        private static void AppendObject(StringBuilder sb, object obj, string? title = null)
+        // 通用输出：给一个结果对象，返回分组列表
+        public static List<DetailGroup> BuildDetailGroups(object obj)
+        {
+            var groups = new Dictionary<string, DetailGroup>();
+
+            foreach (var field in obj.GetType().GetFields())
+            {
+                if (field.GetValue(obj) is not ParaItem item) continue;
+
+                var attr = field.GetCustomAttribute<DisplayAttribute>();
+                string groupName = attr?.Group ?? "其他";
+                int order = attr?.Order ?? 999;
+
+                // OnlyWhen条件不满足就跳过
+                if (!string.IsNullOrEmpty(attr?.OnlyWhen))
+                {
+                    var condField = obj.GetType().GetField(attr.OnlyWhen);
+                    if (condField?.GetValue(obj) is ParaItem cond && cond.Value != 1)
+                        continue;
+                }
+
+                string val = item.HasValue ? item.Value.ToString("F3") : "无值";
+
+                if (!groups.ContainsKey(groupName))
+                    groups[groupName] = new DetailGroup { Title = groupName };
+
+                groups[groupName].Items.Add((order, item.Name, val, item.Unit));
+            }
+
+            // 组内按Order排序
+            foreach (var g in groups.Values)
+                g.Items.Sort((a, b) => a.order.CompareTo(b.order));
+
+            return groups.Values.ToList();
+        }
+        
+        //=====================显示详细信息========================
+        // 递归遍历对象，把所有ParaItem加到列表里
+        private static void AppendObjectItems(List<(string name, string value, string unit)> items, object obj, string? title = null)
         {
             if (title != null)
             {
-                sb.AppendLine();
-                sb.AppendLine($"--- {title} ---");
+                items.Add(($"--- {title} ---", "", ""));  // 标题行，跨三列
             }
 
             foreach (var field in obj.GetType().GetFields())
@@ -79,23 +65,19 @@ namespace PortalFrame._3Dispatch
                 var value = field.GetValue(obj);
                 if (value == null) continue;
 
-                // 如果是 ParaItem，直接输出
                 if (value is ParaItem item)
                 {
-                    sb.AppendLine(item.ToString());
+                    string val = item.HasValue ? item.Value.ToString("F3") : "无值";
+                    items.Add((item.Name, val, item.Unit));
                 }
-                // 其他类（嵌套的），递归进去
                 else if (!value.GetType().IsPrimitive && !(value is string))
                 {
-                    AppendObject(sb, value);
+                    AppendObjectItems(items, value);
                 }
             }
         }
 
         //=====================生成计算书========================
-        /// <summary>
-        /// 生成完整计算书（Word文档）
-        /// </summary>
         public static void GenerateReport(MemberData member, string savePath)
         {
             using (var doc = DocX.Create(savePath))
@@ -105,7 +87,7 @@ namespace PortalFrame._3Dispatch
                    .FontSize(16).Bold().Alignment = Alignment.center;
                 doc.InsertParagraph();
 
-                // 基本信息
+                // ===== 基本信息 =====
                 doc.InsertParagraph("基本信息").Heading(HeadingType.Heading1);
                 var table = doc.AddTable(4, 2);
                 table.Rows[0].Cells[0].Paragraphs[0].Append("构件名");
@@ -117,81 +99,95 @@ namespace PortalFrame._3Dispatch
                 table.Rows[3].Cells[0].Paragraphs[0].Append("材料");
                 table.Rows[3].Cells[1].Paragraphs[0].Append(member.Material.Grade.ToString());
                 doc.InsertTable(table);
-
-                // 长细比（静态）
                 doc.InsertParagraph();
+
+                var CR = member.CheckResult;
+
+                // ===== 1. 长细比验算（静态）=====
                 doc.InsertParagraph("长细比验算").Heading(HeadingType.Heading1);
-                AppendObjectToDoc(doc, member.CheckResult.Slenderness);
+                AppendGroupsToDoc(doc, BuildDetailGroups(CR.Slenderness));
 
-                // 局部稳定（静态）
-                doc.InsertParagraph();
+                // ===== 2. 板件宽厚比验算（静态）=====
                 doc.InsertParagraph("板件宽厚比验算").Heading(HeadingType.Heading1);
-                AppendObjectToDoc(doc, member.CheckResult.LocalStability);
+                AppendGroupsToDoc(doc, BuildDetailGroups(CR.LocalStability));
 
-                // 抗弯强度
-                doc.InsertParagraph();
-                doc.InsertParagraph("抗弯强度验算").Heading(HeadingType.Heading1);
-                var flex = member.CheckResult.FlexureStrength;
-                var flexStation = flex.WorstStation!;
-                doc.InsertParagraph($"最不利组合：{flex.WorstCombo}，最大测站：{flexStation.Station:F0} mm");
-                AppendObjectToDoc(doc, flexStation);
-
-                // 抗剪强度
-                doc.InsertParagraph();
-                doc.InsertParagraph("抗剪强度验算").Heading(HeadingType.Heading1);
-                var shear = member.CheckResult.ShearStrength;
-                var shearStation = shear.WorstStation!;
-                doc.InsertParagraph($"最不利组合：{shear.WorstCombo}，最大测站：{shearStation.Station:F0} mm");
-                AppendObjectToDoc(doc, shearStation);
-
-                // 稳定验算（柱/梁分开）
-                if (member.Type == MemberType.Column && member.CheckResult is ColumnCheckResult col)
+                // ===== 3. 抗弯强度验算 =====
+                var (flexUtil, flexCombo, flexStation) = CR.FlexureStrength.GetWorst();
+                if (flexUtil > 0)
                 {
-                    doc.InsertParagraph();
-                    doc.InsertParagraph("柱平面内稳定验算").Heading(HeadingType.Heading1);
-                    doc.InsertParagraph($"最不利组合：{col.InPlaneStability.WorstCombo}，利用率：{col.InPlaneStability.MaxUtil:F2}");
-                    AppendObjectToDoc(doc, col.InPlaneStability);
-
-                    doc.InsertParagraph();
-                    doc.InsertParagraph("柱平面外稳定验算").Heading(HeadingType.Heading1);
-                    doc.InsertParagraph($"最不利组合：{col.OutPlaneStability.WorstCombo}，利用率：{col.OutPlaneStability.MaxUtil:F2}");
-                    AppendObjectToDoc(doc, col.OutPlaneStability);
-
-                    // φb 详细参数
-                    doc.InsertParagraph("φb 计算过程").Heading(HeadingType.Heading2);
-                    AppendObjectToDoc(doc, col.OutPlaneStability.PhiBDetails[col.OutPlaneStability.WorstCombo]);
+                    doc.InsertParagraph("抗弯强度验算").Heading(HeadingType.Heading1);
+                    doc.InsertParagraph($"最不利组合：{flexCombo}，最不利测站：{flexStation:F0} mm，利用率：{flexUtil:F3}");
+                    AppendGroupsToDoc(doc, BuildDetailGroups(CR.FlexureStrength.Collection[flexCombo][flexStation]));
                 }
-                else if (member.Type == MemberType.Beam && member.CheckResult is BeamCheckResult beam)
-                {
-                    doc.InsertParagraph();
-                    doc.InsertParagraph("梁整体稳定验算").Heading(HeadingType.Heading1);
-                    doc.InsertParagraph($"最不利组合：{beam.LateralStability.WorstCombo}，利用率：{beam.LateralStability.MaxUtil:F2}");
-                    AppendObjectToDoc(doc, beam.LateralStability);
 
-                    doc.InsertParagraph("φb 计算过程").Heading(HeadingType.Heading2);
-                    AppendObjectToDoc(doc, beam.LateralStability.PhiBDetails[beam.LateralStability.WorstCombo]);
+                // ===== 4. 抗剪强度验算 =====
+                var (shearUtil, shearCombo, shearStation) = CR.ShearStrength.GetWorst();
+                if (shearUtil > 0)
+                {
+                    doc.InsertParagraph("抗剪强度验算").Heading(HeadingType.Heading1);
+                    doc.InsertParagraph($"最不利组合：{shearCombo}，最不利测站：{shearStation:F0} mm，利用率：{shearUtil:F3}");
+                    AppendGroupsToDoc(doc, BuildDetailGroups(CR.ShearStrength.Collection[shearCombo][shearStation]));
+                }
+
+                // ===== 5. 整体稳定系数φb =====
+                if (CR.PhiBResult.WorstCombo != "")
+                {
+                    doc.InsertParagraph("整体稳定系数φb计算").Heading(HeadingType.Heading1);
+                    doc.InsertParagraph($"控制组合：{CR.PhiBResult.WorstCombo}（φb={CR.PhiBResult.MinPhiB:F3}）");
+                    AppendGroupsToDoc(doc, BuildDetailGroups(CR.PhiBResult.Collection[CR.PhiBResult.WorstCombo]));
+                }
+
+                // ===== 6. 柱面内稳定 =====
+                if (member.Type == MemberType.Column && CR.InPlaneStability.WorstCombo != "")
+                {
+                    doc.InsertParagraph("柱平面内稳定验算").Heading(HeadingType.Heading1);
+                    doc.InsertParagraph($"最不利组合：{CR.InPlaneStability.WorstCombo}，利用率：{CR.InPlaneStability.MaxUtil:F3}");
+                    AppendGroupsToDoc(doc, BuildDetailGroups(CR.InPlaneStability.Collection[CR.InPlaneStability.WorstCombo]));
+                }
+
+                // ===== 7. 柱面外稳定 =====
+                if (member.Type == MemberType.Column && CR.OutPlaneStability.WorstCombo != "")
+                {
+                    doc.InsertParagraph("柱平面外稳定验算").Heading(HeadingType.Heading1);
+                    doc.InsertParagraph($"最不利组合：{CR.OutPlaneStability.WorstCombo}，利用率：{CR.OutPlaneStability.MaxUtil:F3}");
+                    AppendGroupsToDoc(doc, BuildDetailGroups(CR.OutPlaneStability.Collection[CR.OutPlaneStability.WorstCombo]));
+                }
+
+                // ===== 8. 梁整体稳定 =====
+                if (member.Type == MemberType.Beam && CR.LateralStability.WorstCombo != "")
+                {
+                    doc.InsertParagraph("梁整体稳定验算").Heading(HeadingType.Heading1);
+                    doc.InsertParagraph($"最不利组合：{CR.LateralStability.WorstCombo}，利用率：{CR.LateralStability.MaxUtil:F3}");
+                    AppendGroupsToDoc(doc, BuildDetailGroups(CR.LateralStability.Collection[CR.LateralStability.WorstCombo]));
                 }
 
                 doc.Save();
             }
         }
 
-        // 把对象里的所有 ParaItem 输出到 Word 文档
-        private static void AppendObjectToDoc(DocX doc, object obj)
+        // 把分组列表输出到Word（小标题+两列表格）
+        private static void AppendGroupsToDoc(DocX doc, List<DetailGroup> groups)
         {
-            foreach (var field in obj.GetType().GetFields())
+            foreach (var g in groups)
             {
-                var value = field.GetValue(obj);
-                if (value == null) continue;
+                // 分组小标题
+                doc.InsertParagraph(g.Title).Heading(HeadingType.Heading2);
 
-                if (value is ParaItem item)
+                // 两列表格
+                var table = doc.AddTable(g.Items.Count + 1, 2);
+                table.Rows[0].Cells[0].Paragraphs[0].Append("参数").Bold();
+                table.Rows[0].Cells[1].Paragraphs[0].Append("数值").Bold();
+
+                for (int i = 0; i < g.Items.Count; i++)
                 {
-                    doc.InsertParagraph(item.ToString());
+                    var (order, name, value, unit) = g.Items[i];
+                    table.Rows[i + 1].Cells[0].Paragraphs[0].Append(name);
+                    // 数值带单位
+                    string valText = string.IsNullOrEmpty(unit) ? value : $"{value} {unit}";
+                    table.Rows[i + 1].Cells[1].Paragraphs[0].Append(valText);
                 }
-                else if (!value.GetType().IsPrimitive && !(value is string))
-                {
-                    AppendObjectToDoc(doc, value);
-                }
+                doc.InsertTable(table);
+                doc.InsertParagraph();  // 组后空一行
             }
         }
 

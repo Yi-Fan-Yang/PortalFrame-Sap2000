@@ -3,52 +3,49 @@ using PortalFrame._2CheckResults;
 
 namespace PortalFrame._5data
 {
-    public class Preferences
+    public class ConfigItem
     {
-        // ===== 通用 =====
-        public ParaItem Gamma0 = new("结构重要性系数 γ0");
-        public ParaItem MMR = new("弯矩放大系数 MMR");
-        public ParaItem Ly = new("平面外计算长度 Ly", "mm");
+        public string Name;    // 中文名称
+        public double? Value;   // 数值（用户输入的值，没有就是 null）
+        public string Unit;    // 量纲
 
-        // ===== 加劲肋 =====
-        public ParaItem HasStiffener = new("是否设置加劲肋");
-        public ParaItem StiffenerSpacing = new("加劲肋间距 a", "mm");
-
-        // ===== 隅撑 =====
-        public ParaItem HasBrace = new("是否设置隅撑");
-        public ParaItem PurlinArea = new("檩条截面积 Ap", "mm²");
-        public ParaItem PurlinSpan = new("檩条跨度 lp", "mm");
-        public ParaItem PurlinI33 = new("檩条惯性矩 Ip33", "mm⁴");
-        public ParaItem PurlinDistToFlange = new("檩条形心到梁上翼缘距离 a", "mm");
-        public ParaItem BraceArea = new("隅撑截面积 Ab", "mm²");
-        public ParaItem BraceSpacing = new("隅撑间距 lk", "mm");
-        public ParaItem BraceAngle = new("隅撑与檩条夹角 α", "°");
-
-        // ===== 构造 =====
-        public ParaItem SeismicType = new("抗震类型");
-        public ParaItem LambdaLimit = new("长细比限值 [λ]");
-        public ParaItem FlangeLimit = new("翼缘宽厚比限值 [b/t]");
-        public ParaItem WebLimit = new("腹板高厚比限值 [h0/tw]");
-        public ParaItem UtilLimit = new("应力比限值");
+        public ConfigItem(string name, string unit = "")
+        {
+            Name = name;
+            Unit = unit;
+            Value = null;  // 默认没值
+        }
     }
-
-    public class OverWrites : Preferences
+    // 全局首选项
+    public static class Preferences
     {
-        public ParaItem ElementType = new("构件类型");   // 0=柱, 1=梁
+        // General
+        public static ConfigItem Gamma0 = new("结构重要性系数Gamma0");
+        public static ConfigItem MMR = new("弯矩放大系数MMR");
+        public static ConfigItem SeismicType = new("抗震类型");
+        public static ConfigItem LambdaLimit = new("长细比限值");
+        public static ConfigItem FlangeLimit = new("翼缘宽厚比限值");
+        public static ConfigItem WebLimit = new("腹板高厚比限值");
+        public static ConfigItem UtilLimit = new("应力比限值");
 
-        // ===== 通用 =====
-        public ParaItem Rho = new("有效宽度系数 ρ");
-        public ParaItem PhiPs = new("抗剪折减系数 φps");
-        public ParaItem PhiB = new("整体稳定系数 φb");
-        public ParaItem GammaX = new("塑性发展系数 γx");
+        // Slenderness
+        public static ConfigItem Ly = new("平面外计算长度Ly", "mm");
 
-        // ===== 柱 =====
-        public ParaItem MuX = new("平面内计算长度系数 μx");
-        public ParaItem PhiX = new("平面内稳定系数 φx");
-        public ParaItem BetaMx = new("等效弯矩系数 βmx");
-        public ParaItem PhiY = new("平面外稳定系数 φy");
+        // PhiBDetails
+        public static ConfigItem HasBrace = new("是否隅撑");
+        public static ConfigItem Ap = new("檩条截面积Ap", "mm²");
+        public static ConfigItem Beta = new("连接点距主梁距离比β");
+        public static ConfigItem Lp = new("檩条跨度Lp", "mm");
+        public static ConfigItem Ip = new("檩条I33", "mm⁴");
+        public static ConfigItem A = new("檩条形心距离A", "mm");
+        public static ConfigItem Ak = new("隅撑截面积Ak", "mm²");
+        public static ConfigItem Lkk = new("隅撑间距Lkk", "mm");
+        public static ConfigItem Alpha = new("隅撑夹角α", "°");
+
+        // ShearStrength
+        public static ConfigItem HasStiffener = new("是否加劲肋");
+        public static ConfigItem a = new("加劲肋间距a", "mm");
     }
-
     public static class DefaultValues
     {
         // ===== 通用 =====
@@ -58,32 +55,31 @@ namespace PortalFrame._5data
 
         // ===== 加劲肋 =====
         public const double HasStiffener = 0;             // 是否设置加劲肋（0=否, 1=是）
-        public const double StiffenerSpacing = 3000;      // 加劲肋间距 a（mm）
+        public const double a = 3000;      // 加劲肋间距 a（mm）
 
         // ===== 隅撑 =====
         public const double HasBrace = 1;                  // 是否设置隅撑（0=否, 1=是）
-        public const double PurlinArea = 720;             // 檩条截面积 Ap（mm²）
-        public const double PurlinSpan = 9000;            // 檩条跨度 lp（mm）
-        public const double PurlinI33 = 448600;           // 檩条惯性矩 Ip33（mm⁴）
-        public const double PurlinDistToFlange = 200;      // 檩条形心到梁上翼缘距离 a（mm）
-        public const double BraceArea = 840;               // 隅撑截面积 Ab（mm²）
-        public const double BraceSpacing = 3000;           // 隅撑间距 lk（mm）
-        public const double BraceAngle = 45;              // 隅撑与檩条夹角 α（°）
+        public const double Ap = 720;             // 檩条截面积 Ap（mm²）
+        public const double Beta = 0.1;   // 连接点距主梁距离比β
+        public const double Lp = 9000;            // 檩条跨度 lp（mm）
+        public const double Ip = 448600;           // 檩条惯性矩 Ip33（mm⁴）
+        public const double A = 200;      // 檩条形心到梁上翼缘距离 a（mm）
+        public const double Ak = 840;               // 隅撑截面积 Ak（mm²）
+        public const double Lkk = 3000;           // 隅撑间距 lk（mm）
+        public const double Alpha = 45;              // 隅撑与檩条夹角 α（°）
 
         // ===== 构造限值 =====
         public const double SeismicType = 0;               // 抗震类型（0=自定义, 1=多遇地震, 2=罕遇地震）
         public const double LambdaLimit = 180;            // 长细比限值 [λ]
         public const double FlangeLimit = 15;              // 翼缘宽厚比限值 [b/t]
         public const double WebLimit = 250;              // 腹板高厚比限值 [h0/tw]
-        // ===== 抗震类型1（非抗震）限值 =====
-        public const double Seismic1_LambdaLimit = 180;
-        public const double Seismic1_FlangeLimit = 15;
-        public const double Seismic1_WebLimit = 250;
-
-        // ===== 抗震类型2（抗震）限值 =====
-        public const double Seismic2_LambdaLimit = 150;
-        public const double Seismic2_FlangeLimit = 13;
-        public const double Seismic2_WebLimit = 160;
+         // ===== 抗震类型对应的限值=====
+        public static double[] GetSeismicLimits(int seismicType) => seismicType switch
+        {
+            1 => new[] { 180.0, 15.0, 250.0 },   // 非抗震
+            2 => new[] { 150.0, 13.0, 160.0 },   // 抗震
+            _ => new[] { 180.0, 15.0, 250.0 }    // 自定义
+        };
 
         public const double UtilLimit = 1.0;               // 应力比限值
 
@@ -91,11 +87,19 @@ namespace PortalFrame._5data
         public const double GammaX = 1.05;                 // 塑性发展系数 γx
 
         // ===== 柱 =====
-        public const double MuX = 1.0;                     // 平面内计算长度系数 μx
+        public const double MuX = 2.0;                     // 平面内计算长度系数 μx
         public const double BetaMx = 1.0;                  // 等效弯矩系数 βmx
+
+        public static double GetDefault(string paramName)
+        {
+            var field = typeof(DefaultValues).GetField(paramName);
+            if (field != null && field.FieldType == typeof(double))
+            {
+                return (double)field.GetValue(null)!;
+            }
+            return 0.0;  // 找不到就返回 0
+        }
     }
-
-
     public class DesignCombos
     {
         public List<string> SelectedCombos = new();
@@ -104,13 +108,13 @@ namespace PortalFrame._5data
     // 读取模型时用户选中的 group（用于计算梁对柱转动约束 Kz）
     public class SelectedGroups
     {
-        public List<string> Names = new();
+        public List<string> CheckGroups = new();    // A: 参与验算的group
+        public List<string> KzGroups = new();      // B: 算Kz的group（B⊆A）
     }
-
-
     public class MemberDisplayInfo
     {
         public double Util;
+        public double UtilLimit;   // 这根构件的应力比限值（已处理覆盖项>首选项>默认值）
         public string Text = "";
     }
 }

@@ -1,7 +1,10 @@
 ﻿using CSiAPIv1;
 using PortalFrame._0Sap;
 using PortalFrame._1Model;
+using PortalFrame._2Check;
+using PortalFrame._2CheckResults;
 using PortalFrame._5data;
+using System.Reflection;
 
 namespace PortalFrame._3Dispatch
 {
@@ -11,15 +14,12 @@ namespace PortalFrame._3Dispatch
         // 串杆件-截面-材料
         public static void BuildMembers()
         {
-            Global.ModelData.Members.Clear();
+            Global.Data.Members.Clear();
 
-            foreach (var kv in Global.ModelData.Frames)
+            foreach (var kv in Global.Data.Frames)
             {
                 string frameName = kv.Key;
-                string secName = Global.ModelData.FrameSectionMap[frameName];
-
-                if (!Global.ModelData.Sections.TryGetValue(secName, out var sec)) continue;
-                if (!Global.ModelData.Materials.TryGetValue(sec.MatProp, out var mat)) continue;
+                string secName = Global.Data.FrameSectionMap[frameName];
 
                 // 1. 串杆件
                 var member = new MemberData
@@ -27,47 +27,129 @@ namespace PortalFrame._3Dispatch
                     Name = frameName,
                     SectionName = secName,
                     Frame = kv.Value,
-                    Section = sec,
-                    Material = mat
                 };
+
+                // 读截面和材料，读不到就IsCheckable=false
+                if (!Global.Data.Sections.TryGetValue(secName, out var sec) ||
+                    !Global.Data.Materials.TryGetValue(sec.MatProp, out var mat))
+                {
+                    member.IsCheckable = false;
+                    Global.Data.Members[frameName] = member;
+                    continue;
+                }
+
+                member.Section = sec;
+                member.Material = mat;
                 SectionCal.GetMemberType(member);
 
+                // 判断是否参与验算
+                member.Groups = Global.Data.FrameToGroups.GetValueOrDefault(frameName, new List<string>());
+                member.IsCheckable = member.Groups.Any(g => Global.Data.Groups.CheckGroups.Contains(g));
 
-                // 2. 判断大小端
+                if (!member.IsCheckable)
+                {
+                    Global.Data.Members[frameName] = member;
+                    continue;
+                }
+
+                // 2. 给这个构件赋值分析内力
+                member.AnalysisForces = new();
+                foreach (var (comboName, forces) in Global.Data.Forces)
+                {
+                    if (forces.ContainsKey(frameName))
+                    {
+                        // 把列表转成字典，key=测站位置
+                        var forceDict = new Dictionary<double, ForceData>();
+                        foreach (var (station, f) in forces[frameName])
+                        {
+                            forceDict[station] = f;
+                        }
+                        member.AnalysisForces[comboName] = forceDict;
+                    }
+                }
+
+                // 3. 截面插值（等截面和变截面都调用）
+                SectionCal.InterpolateSection(member);
+
+                // 4. 判断大小端
                 SectionCal.SetBigSmallEnd(member);
 
-                // 3. 算截面补充参数（大端、小端都算）
-                SectionCal.CalcSectionParams(member.SecBig);
-                SectionCal.CalcSectionParams(member.SecSmall);
+                // 5. 算截面补充参数（大端、小端都算）
+                SectionCal.CalcSectionParams(member.StationSections[member.EndStations[1]]);
+                SectionCal.CalcSectionParams(member.StationSections[member.EndStations[0]]);
 
-                // 4. 变截面插值
-                if (member.Section.IsTapered)
-                {
-                    SectionCal.InterpolateSection(member);
-                }
+                // 6. 建结果类
+                member.CheckResult = new CheckResult();
 
-                Global.ModelData.Members[frameName] = member;
+                // 7. 初始化所有组合的结果对象
+                member.CheckResult.InitCombos(member, Global.Data.AllCombos);
+
+                // 8. 用反射设 Default 值
+                SetDefaults(member.CheckResult);
+
+                Global.Data.Members[frameName] = member;
             }
         }
-        // 变截面杆件：插值各测站的截面属性
-        // 变截面杆件：插值各测站的截面属性（插值）
 
         // 算Kz + 写回 member.Kz
-        public static void GetKz(cSapModel sap, SelectedGroups groups)
+        public static void GetKz(cSapModel sap, List<string> kzGroups)
         {
-            // ① 算Kz（填 _preData.Cols）
+            // ① 算Kz
             var kzCalc = new KzCalculator(sap);
-            kzCalc.Calc(groups.Names, Global.ModelData.Cols);
+            kzCalc.Calc(kzGroups);
 
             // ② 把 Kz 写回 member.Kz
-            foreach (var info in Global.ModelData.Cols)
+            foreach (var (g, columns) in kzCalc.GroupColumns)
             {
-                if (Global.ModelData.Members.TryGetValue(info.ColName, out var member))
+                foreach (var (colName, info) in columns)
                 {
-                    member.Kz = info.Kz;
+                    if (Global.Data.Members.TryGetValue(colName, out var member) && member.IsCheckable)
+                    {
+                        member.Kz = info.Kz;
+                    }
                 }
             }
         }
+
+        private static void SetDefaults(object obj)
+        {
+            if (obj == null) return;
+
+            //如果是字典，遍历所有 value 递归
+            if (obj is System.Collections.IDictionary dict)
+            {
+                foreach (var value in dict.Values)
+                {
+                    SetDefaults(value);
+                }
+                return;
+            }
+
+            foreach (var field in obj.GetType().GetFields(BindingFlags.Public | BindingFlags.Instance))
+            {
+                if (field.IsStatic) continue;
+
+                var value = field.GetValue(obj);
+                if (value == null) continue;
+
+                // 如果是 ParaItem，从 DefaultValues 找同名默认值
+                if (value is ParaItem item)
+                {
+                    var defaultField = typeof(DefaultValues).GetField(field.Name, BindingFlags.Public | BindingFlags.Static);
+                    if (defaultField != null)
+                    {
+                        double defaultValue = (double)defaultField.GetValue(null)!;
+                        item.SetDefault(defaultValue);
+                    }
+                }
+                // 如果是其他类（嵌套的），递归进去
+                else if (!value.GetType().IsPrimitive && value.GetType() != typeof(string))
+                {
+                    SetDefaults(value);
+                }
+            }
+        }
+
     }
 
     public static class SectionCal
@@ -77,26 +159,32 @@ namespace PortalFrame._3Dispatch
         {
             if (member.Section is TaperedSectionData tapered)
             {
-                tapered.Start.Station = 0;
-                tapered.End.Station = member.Frame.Length;
+                // 从 Stations 字典里找最小和最大的测站位置
+                double minStation = member.Stations.Values.Min();
+                double maxStation = member.Stations.Values.Max();
+                // 找这两个位置对应的截面
+                var secAtMin = member.StationSections[minStation];
+                var secAtMax = member.StationSections[maxStation];
 
-                if (tapered.End.H >= tapered.Start.H)
+                if (secAtMax.H >= secAtMin.H)
                 {
-                    member.SecBig = tapered.End;
-                    member.SecSmall = tapered.Start;
+                    // 最大测站位置的截面更高 → 大端
+                    member.EndStations[1] = maxStation;
+                    member.EndStations[0] = minStation;
                 }
                 else
                 {
-                    member.SecBig = tapered.Start;
-                    member.SecSmall = tapered.End;
+                    // 最小测站位置的截面更高 → 大端
+                    member.EndStations[1] = minStation;
+                    member.EndStations[0] = maxStation;
                 }
             }
             else
             {
-                var hsec = (HSectionData)member.Section;
-                hsec.Station = 0;
-                member.SecBig = hsec;
-                member.SecSmall = hsec;
+                // 等截面，大小端都用第一个测站位置
+                double firstStation = member.Stations[0];
+                member.EndStations[0] = firstStation;
+                member.EndStations[1] = firstStation;
             }
         }
 
@@ -145,10 +233,8 @@ namespace PortalFrame._3Dispatch
 
         public static void InterpolateSection(MemberData member)
         {
-            if (!member.Section.IsTapered) return;
             if (member.AnalysisForces.Count == 0) return;
 
-            var tapered = (TaperedSectionData)member.Section;
             double L = member.Frame.Length;
             if (L == 0) return;
 
@@ -156,10 +242,32 @@ namespace PortalFrame._3Dispatch
             string firstCombo = member.AnalysisForces.Keys.First();
             var stations = member.AnalysisForces[firstCombo];
 
-            foreach (var st in stations)
+            if (member.Section.IsTapered)
             {
-                double ratio = st.Station / L;
-                member.StationSections[st.Station] = InterpolateOneSection(tapered, ratio);
+                // 变截面：插值每个测站的截面
+                var tapered = (TaperedSectionData)member.Section;
+                foreach (var (station, f) in stations)
+                {
+                    double ratio = station / L;
+                    member.StationSections[station] = InterpolateOneSection(tapered, ratio);
+                }
+            }
+            else
+            {
+                // 等截面：所有测站的截面都是同一个
+                var hsec = (HSectionData)member.Section;
+                foreach (var (station, f) in stations)
+                {
+                    member.StationSections[station] = hsec;
+                }
+            }
+            // 把 StationSections 的 key 按顺序存到字典里
+            member.Stations = new Dictionary<int, double>();
+            int i = 0;
+            foreach (var station in member.StationSections.Keys)
+            {
+                member.Stations[i] = station;
+                i++;
             }
         }
         // 插值变截面

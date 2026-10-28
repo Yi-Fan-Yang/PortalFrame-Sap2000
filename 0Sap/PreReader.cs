@@ -124,6 +124,33 @@ namespace PortalFrame._0Sap
         }
         // 按比例 ratio 插值截面属性（门刚变截面用）
 
+        // 建group-frame映射
+        public static void BuildGroupMappings()
+        {
+            Global.Data.GroupToFrames.Clear();
+            Global.Data.FrameToGroups.Clear();
+
+            foreach (var g in Global.Data.AllGroups)
+            {
+                int count = 0;
+                int[] objType = null!;
+                string[] objName = null!;
+                Global.SapModel.GroupDef.GetAssignments(g, ref count, ref objType, ref objName);
+
+                var frames = new List<string>();
+                for (int i = 0; i < count; i++)
+                {
+                    if (objType[i] != 2) continue;   // 只要frame对象
+                    string frame = objName[i];
+                    frames.Add(frame);
+
+                    if (!Global.Data.FrameToGroups.ContainsKey(frame))
+                        Global.Data.FrameToGroups[frame] = new List<string>();
+                    Global.Data.FrameToGroups[frame].Add(g);
+                }
+                Global.Data.GroupToFrames[g] = frames;
+            }
+        }
 
 
         //==================Private======================
@@ -260,7 +287,7 @@ namespace PortalFrame._0Sap
             int count = 0;
             string[] names = null!;
             Global.SapModel.GroupDef.GetNameList(ref count, ref names);
-            return names?.ToList() ?? new List<string>();
+            return names?.Where(n => n != "ALL").ToList() ?? new List<string>();
         }
 
 

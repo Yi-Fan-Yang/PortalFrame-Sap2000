@@ -81,22 +81,17 @@ namespace PortalFrame._2Check
 
 
         /// <summary>
-        /// 计算腹板有效宽度 he（GB51022-2015 第7.1.1条）
+        // 计算腹板有效宽度 he（GB51022-2015 第7.1.1条）
         /// </summary>
-        /// <param name="sec">测站截面（毛截面，插值后的）</param>
-        /// <param name="N">轴力（压力为正，拉力为负）</param>
-        /// <param name="M">弯矩绝对值</param>
-        /// <param name="fy">钢材屈服强度</param>
-        /// <returns>Ae有效面积, WeTop上边缘有效模量, WeBottom下边缘有效模量</returns>
         public static void EffectiveSection(MemberData member, string comboName)
         {
-            var forces = member.DesignForces[comboName];
-            var flexList = member.CheckResult.FlexureStrength.Combos[comboName];
+            var designDict = member.DesignForces[comboName];
+            var flexDict = member.CheckResult.FlexureStrength.Collection[comboName];
 
-            foreach (var force in forces)
+            foreach (var (station, force) in designDict)
             {
-                var flexResult = flexList.First(s => s.Station == force.Station);
-                var sec = member.StationSections[force.Station];
+                var flexResult = flexDict[station];
+                var sec = member.StationSections[station];
 
                 double tw = sec.Tw;
                 double fy = member.Material.GetDesignValues(tw).fy;

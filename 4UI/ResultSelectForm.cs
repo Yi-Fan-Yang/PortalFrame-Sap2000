@@ -1,31 +1,35 @@
-﻿namespace PortalFrame._4UI
+﻿using PortalFrame._2CheckResults;
+
+namespace PortalFrame._4UI
 {
     public class ResultSelectForm : Form
     {
         // 验算类型选项
-        private RadioButton _rbSummary = new RadioButton();
-        private RadioButton _rbFlexure = new RadioButton();
-        private RadioButton _rbShear = new RadioButton();
-        private RadioButton _rbInPlane = new RadioButton();
-        private RadioButton _rbOutPlane = new RadioButton();
-        private RadioButton _rbSlenderness = new RadioButton();
-        private RadioButton _rbLocalStab = new RadioButton();
+        private RadioButton _rbSummary = new ();
+        private RadioButton _rbFlexure = new ();
+        private RadioButton _rbShear = new ();
+        private RadioButton _rbPhiB = new();
+        private RadioButton _rbColInPlane = new ();
+        private RadioButton _rbColOutPlane = new ();
+        private RadioButton _rbBeamLateral = new ();
+        private RadioButton _rbSlenderness = new ();
+        private RadioButton _rbLocalStab = new();
 
-        private Button _btnOk = new Button();
-        private Button _btnCancel = new Button();
+        private Button _btnOk = new ();
+        private Button _btnCancel = new ();
 
         public string SelectedCheckType { get; private set; } = "汇总";
 
         public ResultSelectForm()
         {
-            this.Font = UiConfig.DefaultFont;
+            this.Font = Global.Ui.DefaultFont;
             FormBorderStyle = FormBorderStyle.FixedSingle;   // 固定大小，不能拖拽
             MaximizeBox = false;                              // 禁用最大化
             MinimizeBox = false;                              // 禁用最小化
 
             Text = "选择验算结果";
             Width = 350;
-            Height = 480;
+            Height = 550;
             StartPosition = FormStartPosition.CenterParent;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
@@ -44,27 +48,35 @@
             _rbSummary.Checked = true;
             y += 45;
 
-            _rbFlexure.Text = "压弯/拉弯";
+            _rbFlexure.Text = CheckTypes.Flexure;
             _rbFlexure.Location = new Point(30, y);
             y += 45;
 
-            _rbShear.Text = "抗剪";
+            _rbShear.Text = CheckTypes.Shear;
             _rbShear.Location = new Point(30, y);
             y += 45;
 
-            _rbInPlane.Text = "平面内稳定";
-            _rbInPlane.Location = new Point(30, y);
+            _rbPhiB.Text = CheckTypes.PhiB;
+            _rbPhiB.Location = new Point(30, y);
             y += 45;
 
-            _rbOutPlane.Text = "平面外稳定";
-            _rbOutPlane.Location = new Point(30, y);
+            _rbColInPlane.Text = CheckTypes.ColumnInPlane;
+            _rbColInPlane.Location = new Point(30, y);
             y += 45;
 
-            _rbSlenderness.Text = "长细比";
+            _rbColOutPlane.Text = CheckTypes.ColumnOutPlane;
+            _rbColOutPlane.Location = new Point(30, y);
+            y += 45;
+
+            _rbBeamLateral.Text = CheckTypes.BeamLateral;
+            _rbBeamLateral.Location = new Point(30, y);
+            y += 45;
+
+            _rbSlenderness.Text = CheckTypes.Slenderness;
             _rbSlenderness.Location = new Point(30, y);
             y += 45;
 
-            _rbLocalStab.Text = "局部稳定";
+            _rbLocalStab.Text = CheckTypes.LocalStability;
             _rbLocalStab.Location = new Point(30, y);
             y += 50;
 
@@ -78,7 +90,7 @@
 
             Controls.AddRange(new Control[]
             {
-        _rbSummary, _rbFlexure, _rbShear, _rbInPlane, _rbOutPlane,
+        _rbSummary, _rbFlexure, _rbShear,_rbPhiB, _rbColInPlane, _rbColOutPlane, _rbBeamLateral,
         _rbSlenderness, _rbLocalStab,
         _btnOk, _btnCancel
             });
@@ -94,12 +106,14 @@
         private void BtnOk_Click(object? sender, EventArgs e)
         {
             if (_rbSummary.Checked) SelectedCheckType = "汇总";
-            else if (_rbFlexure.Checked) SelectedCheckType = "压弯/拉弯";
-            else if (_rbShear.Checked) SelectedCheckType = "抗剪";
-            else if (_rbInPlane.Checked) SelectedCheckType = "平面内稳定";
-            else if (_rbOutPlane.Checked) SelectedCheckType = "平面外稳定";
-            else if (_rbSlenderness.Checked) SelectedCheckType = "长细比";
-            else if (_rbLocalStab.Checked) SelectedCheckType = "局部稳定";
+            else if (_rbFlexure.Checked) SelectedCheckType = CheckTypes.Flexure;
+            else if (_rbShear.Checked) SelectedCheckType = CheckTypes.Shear;
+            else if (_rbPhiB.Checked) SelectedCheckType = CheckTypes.PhiB;
+            else if (_rbColInPlane.Checked) SelectedCheckType = CheckTypes.ColumnInPlane;
+            else if (_rbColOutPlane.Checked) SelectedCheckType = CheckTypes.ColumnOutPlane;
+            else if (_rbBeamLateral.Checked) SelectedCheckType = CheckTypes.BeamLateral;
+            else if (_rbSlenderness.Checked) SelectedCheckType = CheckTypes.Slenderness;
+            else if (_rbLocalStab.Checked) SelectedCheckType = CheckTypes.LocalStability;
 
             DialogResult = DialogResult.OK;
         }

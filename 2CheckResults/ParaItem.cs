@@ -9,6 +9,7 @@ namespace PortalFrame._2CheckResults
         Default          // 默认值
     }
 
+
     public class ParaItem
     {
         // ===== 基本信息 =====
@@ -47,9 +48,14 @@ namespace PortalFrame._2CheckResults
         // Value getter 优先级：Ow > Pre > Cal > Default
         public double Value => _owValue ?? _preValue ?? _calValue ?? _defaultValue ??
             throw new InvalidOperationException("没有值");
-
         // ===== 快速判断有没有值（UI用）=====
-        public bool HasValue => _owValue.HasValue || _preValue.HasValue|| _calValue.HasValue || _defaultValue.HasValue;
+        public bool HasValue => _owValue.HasValue || _preValue.HasValue || _calValue.HasValue || _defaultValue.HasValue;
+        // 首选项 UI 显示用：只看 Pre 值，没有就显示默认值
+        public double? GetPrefDisplayValue()
+        {
+            if (_preValue.HasValue) return _preValue;
+            return _defaultValue;
+        }
 
         // ===== 重置用户值=====
         public void ResetOw() => _owValue = null;
@@ -62,7 +68,7 @@ namespace PortalFrame._2CheckResults
         // ===== 调试/计算书输出 =====
         public override string ToString()
         {
-            string val = Value.ToString("F3");
+            string val = HasValue ? Value.ToString("F3") : "无值";
             string unit = string.IsNullOrEmpty(Unit) ? "" : $" {Unit}";
             string src = Source switch
             {
